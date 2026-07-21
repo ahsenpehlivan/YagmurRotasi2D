@@ -1,0 +1,80 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee0fa64d924f7547b2595477b482cd7, type: 3}
+  m_Name: Level_004
+  m_EditorClassIdentifier: Assembly-CSharp::YagmurRotasi2D.Campaign2D.CampaignLevelDefinition2D
+  stableLevelId: level-004
+  levelNumber: 4
+  displayName: "\xDC\xE7 Kollu Bah\xE7e"
+  chapterNumber: 1
+  gridWidth: 5
+  gridHeight: 5
+  sourceCell: {x: -2, y: 2}
+  sourceOutputDirection: 1
+  targetCell: {x: 2, y: -2}
+  targetEntryDirection: 0
+  deterministicSeed: 0
+  generatorVersion: hand-authored
+  difficultyTier: 0
+  educationalMessage: "\xDC\xE7 kollu borular suyu birden fazla y\xF6ne ay\u0131r\u0131r.
+    A\xE7\u0131k kalan her kol mutlaka ba\u011Flanmal\u0131d\u0131r."
+  twoStarScore: 180
+  threeStarScore: 230
+  minimumRequiredTaps: 9
+  solvedReachablePipeCount: 8
+  flowWaveCount: 7
+  solutionCount: 0
+  branchCount: 0
+  cycleCount: 0
+  difficultyScore: 0
+  contentHash: 592FDE8BC1642D9A292EB9E50FF3B6548697E6ABD9450E72C14A1A47AEA90824
+  pipes:
+  - pipeType: 0
+    gridPos: {x: -1, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 0, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 0, y: 1}
+    startRotationIndex: 2
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 1, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 1, y: 0}
+    startRotationIndex: 0
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: 1, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 2, y: -1}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0

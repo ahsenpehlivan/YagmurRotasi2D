@@ -34,58 +34,128 @@ public static class CampaignGenerateCommand2D
         "Toplanan yağmur suyu, şehir ağaçlarının ve çiçeklerin yaşaması için değerlidir."
     };
 
+    /// <summary>
+    /// Part H (Phase 8A.1): fully transactional - every one of the 14 pilot
+    /// levels is generated and validated in memory FIRST; nothing is written
+    /// to disk (no asset, no catalog slot) unless ALL 14 succeed. If any
+    /// level fails, every in-memory candidate (including ones that already
+    /// succeeded before the failure) is discarded and the previous catalog/
+    /// production assets are left completely unchanged - this project never
+    /// ships a campaign catalog with a "hole" in the middle of the pilot
+    /// range.
+    /// </summary>
     [MenuItem("YagmurRotasi2D/Phase 8/Generate Pilot Campaign Levels 7-20")]
     public static bool GeneratePilotLevels()
     {
         var summary = new List<string>();
-        bool allSucceeded = true;
-        var savedDefinitions = new List<(int levelNumber, CampaignLevelDefinition2D definition)>();
+        var results = new List<(int levelNumber, CampaignLevelGenerator2D.GenerationResult result)>();
+        int firstFailedLevel = -1;
 
         for (int levelNumber = PilotFirstLevel; levelNumber <= PilotLastLevel; levelNumber++)
         {
             var request = BuildRequest(levelNumber);
             CampaignLevelGenerator2D.GenerationResult result = CampaignLevelGenerator2D.Generate(request);
+            results.Add((levelNumber, result));
 
             if (!result.Success)
             {
-                Debug.LogError($"CampaignGenerateCommand2D: Level {levelNumber} FAILED after {result.AttemptsUsed} attempt(s) - " +
-                    $"{result.LastRejectionReason}. Stopping the pilot batch here - levels {PilotFirstLevel}-{levelNumber - 1} " +
-                    "(if any succeeded above) were already saved; levels after this one were not attempted.");
-                allSucceeded = false;
+                firstFailedLevel = levelNumber;
+                Debug.LogError($"CampaignGenerateCommand2D: Level {levelNumber} FAILED after {result.AttemptsUsed} attempt(s) - {result.LastRejectionReason}.");
                 break;
             }
 
+            summary.Add($"Level {levelNumber}: {result.Definition.gridWidth}x{result.Definition.gridHeight}, seed={result.AcceptedSeed}, " +
+                $"attempts={result.AttemptsUsed}, pipes={result.Definition.pipes.Count}, minTaps={result.Definition.minimumRequiredTaps}, " +
+                $"solutionCount={result.Definition.solutionCount}, hash={result.Definition.contentHash.Substring(0, 12)}...");
+        }
+
+        bool allSucceeded = firstFailedLevel < 0;
+
+        if (!allSucceeded)
+        {
+            // Discard every in-memory candidate - including any that already
+            // succeeded before the failure - none of them are ever saved.
+            foreach ((int _, CampaignLevelGenerator2D.GenerationResult result) in results)
+            {
+                if (result.Definition != null) Object.DestroyImmediate(result.Definition);
+            }
+
+            Debug.LogError($"CampaignGenerateCommand2D: Pilot generation ABORTED - Level {firstFailedLevel} failed. " +
+                "0 levels saved; no pilot level assets were committed. The previous catalog and production assets are unchanged." +
+                (summary.Count > 0
+                    ? "\nLevels that WOULD have been saved (discarded, not committed, since the batch is transactional):\n" + string.Join("\n", summary)
+                    : ""));
+            return false;
+        }
+
+        // Every one of the 14 levels succeeded - commit all of them now.
+        var savedDefinitions = new List<(int levelNumber, CampaignLevelDefinition2D definition)>();
+        foreach ((int levelNumber, CampaignLevelGenerator2D.GenerationResult result) in results)
+        {
             CampaignLevelDefinition2D asset = CampaignAssetIO2D.LoadOrCreateDefinitionAsset(levelNumber);
             CampaignAssetIO2D.CopyInto(asset, result.Definition);
             Object.DestroyImmediate(result.Definition);
             EditorUtility.SetDirty(asset);
-
             savedDefinitions.Add((levelNumber, asset));
-
-            summary.Add($"Level {levelNumber}: {asset.gridWidth}x{asset.gridHeight}, seed={result.AcceptedSeed}, " +
-                $"attempts={result.AttemptsUsed}, pipes={asset.pipes.Count}, minTaps={asset.minimumRequiredTaps}, " +
-                $"solutionCount={asset.solutionCount}, hash={asset.contentHash.Substring(0, 12)}...");
         }
 
-        if (savedDefinitions.Count > 0)
+        CampaignLevelCatalog2D catalog = CampaignAssetIO2D.LoadOrCreateCatalogAsset();
+        foreach ((int levelNumber, CampaignLevelDefinition2D definition) in savedDefinitions)
         {
-            CampaignLevelCatalog2D catalog = CampaignAssetIO2D.LoadOrCreateCatalogAsset();
-            foreach ((int levelNumber, CampaignLevelDefinition2D definition) in savedDefinitions)
-            {
-                CampaignAssetIO2D.AssignCatalogSlot(catalog, levelNumber, definition);
-            }
-            EditorUtility.SetDirty(catalog);
+            CampaignAssetIO2D.AssignCatalogSlot(catalog, levelNumber, definition);
+        }
+        EditorUtility.SetDirty(catalog);
 
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        Debug.Log($"CampaignGenerateCommand2D: Pilot generation SUCCEEDED - Levels {PilotFirstLevel}-{PilotLastLevel} were saved.\n" +
+            string.Join("\n", summary));
+
+        return true;
+    }
+
+    /// <summary>
+    /// Part H fallback hygiene: deletes any Level_007..Level_020 asset that
+    /// exists on disk but is NOT the object currently referenced by the
+    /// catalog's own slot for that level number (i.e. orphaned - left over
+    /// from an interrupted or pre-transactional run). Never touches Levels
+    /// 1-6 or any level whose asset matches its catalog slot exactly.
+    /// </summary>
+    [MenuItem("YagmurRotasi2D/Phase 8/Cleanup Incomplete Pilot Level Assets")]
+    public static void CleanupIncompletePilotAssets()
+    {
+        CampaignLevelCatalog2D catalog = AssetDatabase.LoadAssetAtPath<CampaignLevelCatalog2D>(CampaignAssetIO2D.CatalogAssetPath);
+        var removed = new List<string>();
+
+        for (int levelNumber = PilotFirstLevel; levelNumber <= PilotLastLevel; levelNumber++)
+        {
+            string path = CampaignAssetIO2D.LevelAssetPath(levelNumber);
+            var onDisk = AssetDatabase.LoadAssetAtPath<CampaignLevelDefinition2D>(path);
+            if (onDisk == null)
+            {
+                continue;
+            }
+
+            bool referencedInCatalog = catalog != null && catalog.levels != null &&
+                levelNumber - 1 < catalog.levels.Count && catalog.levels[levelNumber - 1] == onDisk;
+
+            if (!referencedInCatalog)
+            {
+                AssetDatabase.DeleteAsset(path);
+                removed.Add(path);
+            }
         }
 
-        Debug.Log((allSucceeded
-            ? $"CampaignGenerateCommand2D: Pilot generation SUCCEEDED - Levels {PilotFirstLevel}-{PilotLastLevel} generated and saved."
-            : $"CampaignGenerateCommand2D: Pilot generation INCOMPLETE - {savedDefinitions.Count} level(s) saved before the failure above.")
-            + "\n" + string.Join("\n", summary));
+        if (removed.Count == 0)
+        {
+            Debug.Log("CampaignGenerateCommand2D: No orphaned pilot level assets found - every Level 7-20 asset on disk (if any) matches its catalog slot.");
+            return;
+        }
 
-        return allSucceeded;
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log($"CampaignGenerateCommand2D: Removed {removed.Count} orphaned pilot asset(s):\n" + string.Join("\n", removed));
     }
 
     /// <summary>
@@ -141,7 +211,8 @@ public static class CampaignGenerateCommand2D
         return true;
     }
 
-    private static CampaignLevelGenerator2D.GenerationRequest BuildRequest(int levelNumber)
+    /// <summary>Internal (not private) so CampaignSmokeTest2D (Phase 8A.1 Part G) can smoke-test the EXACT same request configuration the real pilot batch will use, instead of a second, potentially-drifting copy.</summary>
+    internal static CampaignLevelGenerator2D.GenerationRequest BuildRequest(int levelNumber)
     {
         CampaignDifficultyProfiles2D.Profile profile = CampaignDifficultyProfiles2D.ForLevel(levelNumber);
 

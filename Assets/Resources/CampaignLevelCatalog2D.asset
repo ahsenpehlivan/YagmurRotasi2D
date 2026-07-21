@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26133fe5d2af7cc4297580a6551e71d2, type: 3}
+  m_Name: CampaignLevelCatalog2D
+  m_EditorClassIdentifier: Assembly-CSharp::YagmurRotasi2D.Campaign2D.CampaignLevelCatalog2D
+  catalogVersion: 1
+  levels:
+  - {fileID: 11400000, guid: 504b380d2cbe3354ca2c157cf6e1f291, type: 2}
+  - {fileID: 11400000, guid: 626a4803accac6440b4fd1bba7807aeb, type: 2}
+  - {fileID: 11400000, guid: 4b7da29a0d92ab64bbdbab9fe7a67297, type: 2}
+  - {fileID: 11400000, guid: c5eeb7c4d2ccac6408155ff59ed96c07, type: 2}
+  - {fileID: 11400000, guid: d35819889b07f1c44a5eaaebfaacfd74, type: 2}
+  - {fileID: 11400000, guid: cb1efc4ab15c33d4db8d43b39c5c3cf4, type: 2}

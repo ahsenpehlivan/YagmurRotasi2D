@@ -1,0 +1,75 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee0fa64d924f7547b2595477b482cd7, type: 3}
+  m_Name: Level_002
+  m_EditorClassIdentifier: Assembly-CSharp::YagmurRotasi2D.Campaign2D.CampaignLevelDefinition2D
+  stableLevelId: level-002
+  levelNumber: 2
+  displayName: "K\u0131vr\u0131ml\u0131 Su Yolu"
+  chapterNumber: 1
+  gridWidth: 5
+  gridHeight: 5
+  sourceCell: {x: -2, y: 2}
+  sourceOutputDirection: 1
+  targetCell: {x: 2, y: -2}
+  targetEntryDirection: 0
+  deterministicSeed: 0
+  generatorVersion: hand-authored
+  difficultyTier: 0
+  educationalMessage: "Suyun planl\u0131 bir rotadan ta\u015F\u0131nmas\u0131, parklar\u0131n
+    ve ye\u015Fil alanlar\u0131n sulanmas\u0131na yard\u0131mc\u0131 olur."
+  twoStarScore: 170
+  threeStarScore: 220
+  minimumRequiredTaps: 5
+  solvedReachablePipeCount: 7
+  flowWaveCount: 7
+  solutionCount: 0
+  branchCount: 0
+  cycleCount: 0
+  difficultyScore: 0
+  contentHash: 34A2E8932F0714D8E2B39DF9D2957F5B1C5C6B1E46DF976D0A058B97F08A47AD
+  pipes:
+  - pipeType: 1
+    gridPos: {x: -1, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -1, y: 1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 0, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 0
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: 1, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 1, y: 0}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -1}
+    startRotationIndex: 3
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 2, y: -1}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0

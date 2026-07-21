@@ -21,7 +21,23 @@ using YagmurRotasi2D.Gameplay2D;
 /// </summary>
 public static class CampaignLevelGenerator2D
 {
-    public const string GeneratorVersion = "8A.1";
+    /// <summary>
+    /// Bumped 8A.1 -> 8A.2 for the density-aware graph expansion rewrite
+    /// (ear insertion, the branch/cycle zero-new-cell fix, edge detours,
+    /// challenge-level Tee/Cross quality checks), then 8A.2 -> 8A.3 for the
+    /// uniqueness solver rewrite (canonical domains, AC-3, MRV, connectivity
+    /// pruning, known-solution-first alternative search) plus the Part M
+    /// pipeline reorder (scramble/tap-target check now runs before
+    /// uniqueness, not after). Both are genuine content-affecting changes,
+    /// not just bugfixes that happen to preserve output: the uniqueness
+    /// rewrite can ACCEPT candidates (like Level 10's 13-15 pipe case) that
+    /// 8A.2 could only report Inconclusive on and reject - so the actual set
+    /// of seeds that produce an accepted candidate can differ between
+    /// versions, not just the candidate's internal details. The version
+    /// string is part of CampaignContentHash2D's input specifically so this
+    /// kind of change is never silently invisible in a stored hash.
+    /// </summary>
+    public const string GeneratorVersion = "8A.3";
 
     public sealed class GenerationRequest
     {
@@ -31,7 +47,20 @@ public static class CampaignLevelGenerator2D
         public int BaseCampaignSeed;
         public int MaxAttempts;
         public int MaxSearchStepsPerPath = 4000;
-        public int MaxUniquenessAssignments = 300000;
+
+        /// <summary>
+        /// Phase 8A.3 Part L: a DFS node-visit budget for the exact
+        /// uniqueness search (replaces the old, much coarser "complete
+        /// assignments checked" counter - the CSP rewrite makes a node
+        /// budget the meaningful unit). 200,000 nodes comfortably covers a
+        /// 13-15 pipe 5x5 candidate after canonical domains/AC-3/MRV/
+        /// connectivity pruning - see the benchmark command for actual
+        /// measured costs before tuning this further.
+        /// </summary>
+        public int MaxUniquenessSearchNodes = 200000;
+
+        /// <summary>Phase 8A.3 Part L: wall-clock ceiling per candidate's uniqueness search, independent of the node budget (a slow-but-shallow search could exhaust time before nodes, or vice versa). A timeout is always treated as Inconclusive (rejected), never as proof of uniqueness.</summary>
+        public int MaxUniquenessElapsedMilliseconds = 2000;
     }
 
     public sealed class GenerationResult
@@ -42,20 +71,64 @@ public static class CampaignLevelGenerator2D
         public string LastRejectionReason;
         public int AcceptedSeed;
         public CampaignMetrics2D.LevelMetrics Metrics;
+
+        /// <summary>Phase 8A.3 Part P: the uniqueness search diagnostics for the ACCEPTED attempt (null if generation failed, or if no attempt ever reached the uniqueness stage) - lets callers like the smoke tests report exact uniqueness stats, not just the pass/fail outcome.</summary>
+        public CampaignUniquenessSolver2D.UniquenessSearchDiagnostics UniquenessDiagnostics;
     }
 
     public static GenerationResult Generate(GenerationRequest request)
     {
-        var stopwatch = Stopwatch.StartNew();
         CampaignDifficultyProfiles2D.Profile profile = CampaignDifficultyProfiles2D.ForLevel(request.LevelNumber);
+        var bounds = new GridBounds2D(profile.GridWidth, profile.GridHeight);
+
+        // Part B (Phase 8A.1): a pure, non-stochastic pre-flight check. If
+        // the anchor geometry is invalid it is invalid for EVERY seed and
+        // EVERY attempt identically - fail once here instead of burning the
+        // entire attempt budget repeating the same deterministic failure.
+        if (!CampaignGraphBuilder2D.ValidateProfileGeometry(bounds, out string geometryReason))
+        {
+            UnityEngine.Debug.LogError(CampaignGraphBuilder2D.DescribeAnchorDiagnostics(request.LevelNumber, bounds, 0) +
+                $"\nProfile=Tier{profile.DifficultyTier} ({profile.GridWidth}x{profile.GridHeight})");
+            return new GenerationResult
+            {
+                Success = false,
+                AttemptsUsed = 0,
+                LastRejectionReason = $"Campaign profile invalid before generation attempts. {geometryReason}"
+            };
+        }
+
+        // Part G (Phase 8A.2): pure geometric feasibility - catches only a
+        // density target that is mathematically impossible on this board
+        // size, never a generator-implementation limitation (those are
+        // legitimate per-attempt rejections and still go through the retry
+        // loop below).
+        if (!CampaignGraphBuilder2D.ValidateProfileFeasibility(bounds, profile.MinActivePipes, profile.MaxActivePipes, out string feasibilityReason))
+        {
+            UnityEngine.Debug.LogError($"Level {request.LevelNumber}: profile infeasible - {feasibilityReason}");
+            return new GenerationResult
+            {
+                Success = false,
+                AttemptsUsed = 0,
+                LastRejectionReason = $"Campaign profile invalid before generation attempts. {feasibilityReason}"
+            };
+        }
+
+        var stopwatch = Stopwatch.StartNew();
         string lastReason = "no attempts made";
+
+        // Part A/I (Phase 8A.2): aggregated across every failed attempt, so
+        // a final failure logs ONE summary line instead of up to
+        // MaxAttempts near-identical ones.
+        var aggregate = new AggregatedGenerationDiagnostics();
 
         for (int attempt = 0; attempt < request.MaxAttempts; attempt++)
         {
             int seed = CampaignSeededRandom2D.DeriveAttemptSeed(request.BaseCampaignSeed, request.LevelNumber, GeneratorVersion, attempt);
             var rng = new CampaignSeededRandom2D(seed);
 
-            CampaignLevelDefinition2D candidate = TryGenerateOnce(request, profile, seed, rng, attempt + 1, out lastReason);
+            CampaignLevelDefinition2D candidate = TryGenerateOnce(request, profile, seed, rng, attempt + 1, out lastReason, out CampaignGraphBuilder2D.GraphBuildDiagnostics diagnostics, out CampaignUniquenessSolver2D.UniquenessSearchDiagnostics uniquenessDiag);
+            aggregate.Accumulate(diagnostics);
+
             if (candidate != null)
             {
                 stopwatch.Stop();
@@ -67,18 +140,75 @@ public static class CampaignLevelGenerator2D
                     Definition = candidate,
                     AttemptsUsed = attempt + 1,
                     AcceptedSeed = seed,
-                    Metrics = metrics
+                    Metrics = metrics,
+                    UniquenessDiagnostics = uniquenessDiag
                 };
             }
         }
 
         stopwatch.Stop();
+        UnityEngine.Debug.LogError($"Level {request.LevelNumber} generation diagnostics (Phase 8A.2 Part A):\n" + aggregate.Describe(request.MaxAttempts));
         return new GenerationResult
         {
             Success = false,
             AttemptsUsed = request.MaxAttempts,
             LastRejectionReason = lastReason
         };
+    }
+
+    /// <summary>Part A/I: sums GraphBuildDiagnostics across every attempt in one Generate() call and tracks the min/max/avg final active-pipe count actually reached, so a batch failure can be diagnosed from a single log line instead of scrolling through hundreds.</summary>
+    private sealed class AggregatedGenerationDiagnostics
+    {
+        private int attemptsWithData;
+        private int sumFinalActivePipes;
+        private int minFinalActivePipes = int.MaxValue;
+        private int maxFinalActivePipes = int.MinValue;
+        private int sumBackboneCells;
+        private int totalEarAttempts, totalEarSuccesses;
+        private int totalDetourAttempts, totalDetourSuccesses;
+        private int totalRejectedEndpointDegreeLimit, totalRejectedNoCandidatePairs, totalRejectedNoValidUnusedPath, totalRejectedZeroNewCellPath, totalRejectedWouldExceedMax;
+
+        public void Accumulate(CampaignGraphBuilder2D.GraphBuildDiagnostics d)
+        {
+            if (d == null) return;
+            attemptsWithData++;
+            sumFinalActivePipes += d.FinalActivePipeCount;
+            minFinalActivePipes = Mathf.Min(minFinalActivePipes, d.FinalActivePipeCount);
+            maxFinalActivePipes = Mathf.Max(maxFinalActivePipes, d.FinalActivePipeCount);
+            sumBackboneCells += d.BackboneCellCount;
+            totalEarAttempts += d.EarAttempts;
+            totalEarSuccesses += d.EarSuccesses;
+            totalDetourAttempts += d.DetourAttempts;
+            totalDetourSuccesses += d.DetourSuccesses;
+            totalRejectedEndpointDegreeLimit += d.RejectedEndpointDegreeLimit;
+            totalRejectedNoCandidatePairs += d.RejectedNoCandidatePairs;
+            totalRejectedNoValidUnusedPath += d.RejectedNoValidUnusedPath;
+            totalRejectedZeroNewCellPath += d.RejectedZeroNewCellPath;
+            totalRejectedWouldExceedMax += d.RejectedWouldExceedMax;
+        }
+
+        public string Describe(int totalAttempts)
+        {
+            if (attemptsWithData == 0)
+            {
+                return "- no attempts reached graph construction (rejected before backbone search - see the geometry/feasibility pre-flight message above).";
+            }
+
+            float avg = sumFinalActivePipes / (float)attemptsWithData;
+            float avgBackbone = sumBackboneCells / (float)attemptsWithData;
+
+            return $"- attempts: {totalAttempts}\n" +
+                $"- active pipes reached: min={minFinalActivePipes}, max={maxFinalActivePipes}, avg={avg:0.#}\n" +
+                $"- average backbone cell count: {avgBackbone:0.#}\n" +
+                $"- ear insertions: {totalEarSuccesses} succeeded / {totalEarAttempts} tried\n" +
+                $"- detour insertions: {totalDetourSuccesses} succeeded / {totalDetourAttempts} tried\n" +
+                "- ear/detour rejections:\n" +
+                $"  - endpoint degree limit: {totalRejectedEndpointDegreeLimit}\n" +
+                $"  - no candidate pairs (degree saturated): {totalRejectedNoCandidatePairs}\n" +
+                $"  - no valid unused path found: {totalRejectedNoValidUnusedPath}\n" +
+                $"  - zero-new-cell path rejected: {totalRejectedZeroNewCellPath}\n" +
+                $"  - would exceed max active pipes: {totalRejectedWouldExceedMax}";
+        }
     }
 
     /// <summary>
@@ -95,11 +225,36 @@ public static class CampaignLevelGenerator2D
     /// </summary>
     public static GenerationResult GenerateFromExactSeed(GenerationRequest request, int exactSeed)
     {
-        var stopwatch = Stopwatch.StartNew();
         CampaignDifficultyProfiles2D.Profile profile = CampaignDifficultyProfiles2D.ForLevel(request.LevelNumber);
+        var bounds = new GridBounds2D(profile.GridWidth, profile.GridHeight);
+
+        if (!CampaignGraphBuilder2D.ValidateProfileGeometry(bounds, out string geometryReason))
+        {
+            UnityEngine.Debug.LogError(CampaignGraphBuilder2D.DescribeAnchorDiagnostics(request.LevelNumber, bounds, 0) +
+                $"\nProfile=Tier{profile.DifficultyTier} ({profile.GridWidth}x{profile.GridHeight})");
+            return new GenerationResult
+            {
+                Success = false,
+                AttemptsUsed = 0,
+                LastRejectionReason = $"Campaign profile invalid before generation attempts. {geometryReason}"
+            };
+        }
+
+        if (!CampaignGraphBuilder2D.ValidateProfileFeasibility(bounds, profile.MinActivePipes, profile.MaxActivePipes, out string feasibilityReason))
+        {
+            UnityEngine.Debug.LogError($"Level {request.LevelNumber}: profile infeasible - {feasibilityReason}");
+            return new GenerationResult
+            {
+                Success = false,
+                AttemptsUsed = 0,
+                LastRejectionReason = $"Campaign profile invalid before generation attempts. {feasibilityReason}"
+            };
+        }
+
+        var stopwatch = Stopwatch.StartNew();
         var rng = new CampaignSeededRandom2D(exactSeed);
 
-        CampaignLevelDefinition2D candidate = TryGenerateOnce(request, profile, exactSeed, rng, 1, out string rejectionReason);
+        CampaignLevelDefinition2D candidate = TryGenerateOnce(request, profile, exactSeed, rng, 1, out string rejectionReason, out _, out CampaignUniquenessSolver2D.UniquenessSearchDiagnostics uniquenessDiag);
         stopwatch.Stop();
 
         if (candidate == null)
@@ -120,7 +275,8 @@ public static class CampaignLevelGenerator2D
             Definition = candidate,
             AttemptsUsed = 1,
             AcceptedSeed = exactSeed,
-            Metrics = metrics
+            Metrics = metrics,
+            UniquenessDiagnostics = uniquenessDiag
         };
     }
 
@@ -163,14 +319,19 @@ public static class CampaignLevelGenerator2D
         }
     }
 
-    private static CampaignLevelDefinition2D TryGenerateOnce(
-        GenerationRequest request, CampaignDifficultyProfiles2D.Profile profile, int seed, CampaignSeededRandom2D rng, int attemptNumber, out string rejectionReason)
+    /// <summary>Internal (not private) so CampaignUniquenessBenchmark2D (Phase 8A.3 Part O) can reuse this EXACT real pipeline up to (and including) the uniqueness stage, instead of a second, potentially-drifting copy.</summary>
+    internal static CampaignLevelDefinition2D TryGenerateOnce(
+        GenerationRequest request, CampaignDifficultyProfiles2D.Profile profile, int seed, CampaignSeededRandom2D rng, int attemptNumber,
+        out string rejectionReason, out CampaignGraphBuilder2D.GraphBuildDiagnostics diagnostics,
+        out CampaignUniquenessSolver2D.UniquenessSearchDiagnostics uniquenessDiagnostics)
     {
         var bounds = new GridBounds2D(profile.GridWidth, profile.GridHeight);
+        diagnostics = new CampaignGraphBuilder2D.GraphBuildDiagnostics();
+        uniquenessDiagnostics = null;
 
         CampaignGraphBuilder2D.SolvedGraph graph = CampaignGraphBuilder2D.TryBuildGraph(
-            bounds, profile.BranchAttempts, profile.MinActivePipes, profile.MaxActivePipes,
-            rng, request.MaxSearchStepsPerPath, out rejectionReason);
+            bounds, profile.BranchAttempts, profile.MinActivePipes, profile.PreferredActivePipes, profile.MaxActivePipes,
+            rng, request.MaxSearchStepsPerPath, out rejectionReason, backboneCellsOut: null, diagnosticsOut: diagnostics);
 
         if (graph == null)
         {
@@ -195,6 +356,42 @@ public static class CampaignLevelGenerator2D
         // position, independent of Dictionary enumeration order.
         pipes.Sort((a, b) => a.gridPos.x != b.gridPos.x ? a.gridPos.x.CompareTo(b.gridPos.x) : a.gridPos.y.CompareTo(b.gridPos.y));
 
+        // Part L (Phase 8A.2): a challenge level must be a genuine network,
+        // not density satisfied by one long trivial snake - require at
+        // least one real Tee junction, and cap Cross density on small
+        // boards (a 5x5 board especially has little room to route AROUND a
+        // fully-open 4-way junction, so more than one quickly forces
+        // near-snake topology around it anyway).
+        if (profile.IsChallengeLevel)
+        {
+            if (graph.BranchCount + graph.DetourCount < 1)
+            {
+                rejectionReason = "challenge level has no reconnecting branch/cycle/detour - density was reached by backbone length alone (Part L difficulty-quality requirement)";
+                return null;
+            }
+
+            int teeCount = 0;
+            int crossCount = 0;
+            foreach (PipeSpawnData2D pipe in pipes)
+            {
+                if (pipe.pipeType == PipeType2D.Tee) teeCount++;
+                else if (pipe.pipeType == PipeType2D.Cross) crossCount++;
+            }
+
+            if (teeCount < 1)
+            {
+                rejectionReason = "challenge level lacks a Tee junction (Part L difficulty-quality requirement)";
+                return null;
+            }
+
+            int maxCrossForBoard = Mathf.Max(1, (profile.GridWidth * profile.GridHeight) / 25);
+            if (crossCount > maxCrossForBoard)
+            {
+                rejectionReason = $"challenge level has {crossCount} Cross junction(s), exceeding the {maxCrossForBoard} allowed on a {profile.GridWidth}x{profile.GridHeight} board (Part L - avoid excessive Cross density)";
+                return null;
+            }
+        }
+
         // Validate the solved layout with the real, unchanged FlowSolver2D -
         // this is the authoritative safety net: no candidate is ever accepted
         // without genuinely passing the same solver production gameplay uses.
@@ -203,7 +400,18 @@ public static class CampaignLevelGenerator2D
         List<PipeTile2D> solvedOrderPipes;
         try
         {
+            // BUG HISTORY (Phase 8A.3.1): CreateBoard() alone leaves the
+            // board at its default 5x5 - without this, every candidate for
+            // a non-5x5 profile (the entire 6x6-10x10 range, including
+            // Levels 11-20 of THIS pilot batch) would have pipes outside
+            // that default range rejected by BoardManager2D.IsInsideGrid,
+            // and BranchingSolverTestRunner.CreatePipe's own Require()
+            // check would throw instead of this candidate being cleanly
+            // rejected and retried. Found while investigating an unrelated
+            // test-fixture bounds bug that turned out to share the exact
+            // same root cause.
             BoardManager2D board = BranchingSolverTestRunner.CreateBoard(spawned);
+            board.SetGridSize(bounds.Width, bounds.Height);
             FlowSolver2D solver = BranchingSolverTestRunner.CreateSolver(board, spawned);
 
             foreach (PipeSpawnData2D spawn in pipes)
@@ -242,17 +450,43 @@ public static class CampaignLevelGenerator2D
             return null;
         }
 
-        // Re-order pipes to match the real BFS-from-source discovery order for
-        // the uniqueness solver's variable ordering (a real MRV heuristic was
-        // not attempted - documented simplification, see CampaignUniquenessSolver2D).
+        // Part M (Phase 8A.3): every CHEAP gate runs before the expensive
+        // uniqueness search - scramble generation and the tap-target check
+        // used to run AFTER uniqueness, wasting the whole uniqueness search
+        // budget on candidates that were always going to be rejected for an
+        // unrelated, nearly-free reason. Nothing about the scramble depends
+        // on uniqueness (it only reads solved/start rotations), so moving it
+        // earlier changes nothing about correctness or determinism within
+        // this call - rng isn't reused after TryGenerateOnce returns.
+        CampaignPipeConverter2D.GenerateScramble(pipes, profile.MinMinimumTaps, profile.MaxMinimumTaps, rng);
+        int minimumTaps = CampaignPipeConverter2D.ComputeMinimumTaps(pipes);
+
+        if (CampaignPipeConverter2D.IsAlreadySolvedState(pipes))
+        {
+            rejectionReason = "scramble accidentally left the level already solved";
+            return null;
+        }
+
+        if (minimumTaps < profile.MinMinimumTaps || minimumTaps > profile.MaxMinimumTaps)
+        {
+            rejectionReason = $"minimum taps {minimumTaps} outside target range [{profile.MinMinimumTaps},{profile.MaxMinimumTaps}]";
+            return null;
+        }
+
+        // Re-order pipes to match the real BFS-from-source discovery order -
+        // used only as CampaignUniquenessSolver2D's initial MRV tie-break
+        // seed order, not a correctness requirement (the solver reorders
+        // dynamically via its own MRV selection during search).
         var pipesInBfsOrder = new List<PipeSpawnData2D>(pipes.Count);
         var byPosition = new Dictionary<Vector2Int, PipeSpawnData2D>();
         foreach (PipeSpawnData2D p in pipes) byPosition[p.gridPos] = p;
         foreach (PipeTile2D tile in solvedOrderPipes) pipesInBfsOrder.Add(byPosition[tile.GridPosition]);
 
+        uniquenessDiagnostics = new CampaignUniquenessSolver2D.UniquenessSearchDiagnostics();
         CampaignUniquenessSolver2D.UniquenessOutcome outcome = CampaignUniquenessSolver2D.CountSolutions(
-            graph.Source, graph.SourceOutputDirection, graph.Target, graph.TargetEntryDirection,
-            pipesInBfsOrder, request.MaxUniquenessAssignments, out int solutionsFound);
+            bounds, graph.Source, graph.SourceOutputDirection, graph.Target, graph.TargetEntryDirection,
+            pipesInBfsOrder, request.MaxUniquenessSearchNodes, out int solutionsFound,
+            request.MaxUniquenessElapsedMilliseconds, uniquenessDiagnostics);
 
         if (outcome != CampaignUniquenessSolver2D.UniquenessOutcome.One)
         {
@@ -268,22 +502,6 @@ public static class CampaignLevelGenerator2D
             {
                 rejectionReason = "uniqueness check inconclusive (search budget exceeded)";
             }
-            return null;
-        }
-
-        // Deterministic starting scramble (Part L).
-        CampaignPipeConverter2D.GenerateScramble(pipes, profile.MinMinimumTaps, profile.MaxMinimumTaps, rng);
-        int minimumTaps = CampaignPipeConverter2D.ComputeMinimumTaps(pipes);
-
-        if (CampaignPipeConverter2D.IsAlreadySolvedState(pipes))
-        {
-            rejectionReason = "scramble accidentally left the level already solved";
-            return null;
-        }
-
-        if (minimumTaps < profile.MinMinimumTaps || minimumTaps > profile.MaxMinimumTaps)
-        {
-            rejectionReason = $"minimum taps {minimumTaps} outside target range [{profile.MinMinimumTaps},{profile.MaxMinimumTaps}]";
             return null;
         }
 

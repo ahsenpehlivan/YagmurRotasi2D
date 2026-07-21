@@ -227,7 +227,7 @@ public static class CampaignValidationCommands2D
 
     // ---------------- Uniqueness validation ----------------
 
-    private const int MaxUniquenessAssignmentsPerLevel = 300000;
+    private const int MaxUniquenessSearchNodesPerLevel = 300000;
 
     private static bool RunUniquenessValidation(out List<string> lines)
     {
@@ -255,9 +255,10 @@ public static class CampaignValidationCommands2D
                 continue;
             }
 
+            var bounds = new GridBounds2D(def.gridWidth, def.gridHeight);
             CampaignUniquenessSolver2D.UniquenessOutcome outcome = CampaignUniquenessSolver2D.CountSolutions(
-                def.sourceCell, def.sourceOutputDirection, def.targetCell, def.targetEntryDirection,
-                pipesInBfsOrder, MaxUniquenessAssignmentsPerLevel, out int solutionsFound);
+                bounds, def.sourceCell, def.sourceOutputDirection, def.targetCell, def.targetEntryDirection,
+                pipesInBfsOrder, MaxUniquenessSearchNodesPerLevel, out int solutionsFound);
 
             if (outcome == CampaignUniquenessSolver2D.UniquenessOutcome.One)
             {
@@ -277,7 +278,7 @@ public static class CampaignValidationCommands2D
                 }
                 else
                 {
-                    reason = $"inconclusive (search budget of {MaxUniquenessAssignmentsPerLevel} assignments exceeded)";
+                    reason = $"inconclusive (search budget of {MaxUniquenessSearchNodesPerLevel} assignments exceeded)";
                 }
                 lines.Add($"FAIL: Level {def.levelNumber} - {reason}.");
                 failCount++;

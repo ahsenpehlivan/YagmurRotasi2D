@@ -2,7 +2,54 @@
 
 ## Active Phase
 
-Phase 8A - Scalable Campaign Foundation and Pilot Generator
+Phase 8A.3.1 - Repair Uniqueness Solver Test Fixtures (CHECKPOINT - paused mid-fix)
+
+## Checkpoint (Phase 8A.3.1 - paused, not yet resumed)
+
+**Architecture as of this checkpoint**: the campaign generator is graph-first
+and Editor-only (`CampaignGraphBuilder2D` builds a solved topology,
+`CampaignPipeConverter2D` converts it to real pipe data, the real unchanged
+`FlowSolver2D` validates every candidate, `CampaignUniquenessSolver2D` is a
+from-scratch CSP rewrite - canonical orientation domains, AC-3 propagation,
+MRV ordering, connectivity pruning, an exact packed-bitset memoization key,
+known-solution-first alternative search). `CampaignLevelGenerator2D`
+orchestrates generation with a transactional pilot-batch commit
+(`CampaignGenerateCommand2D`). `GeneratorVersion = "8A.3"`.
+
+**Last confirmed live Unity results** (from the user, most recent first):
+- Uniqueness Solver Fixture Suite: **9/11 PASSED, 2 FAILED** (memoization
+  correctness cases 1-5 all passed; production Levels 4-6 report exactly one
+  solution). The 2 failures are fixture-construction bugs, not demonstrated
+  solver bugs - see below.
+- Level 7 smoke test: PASSED (5x5, seed 1506997783, 10 pipes, 1 solution).
+- Level 10 density diagnostics: min=13/max=15 active pipes reached, 500
+  attempts - the 8A.2 density fix is confirmed working.
+
+**Exact remaining failure** (why the checkpoint stopped here):
+- `[FAIL 02/11] Dense Tee hub, cross-checked against brute force` - the
+  brute-force reference's own `BoardManager2D` was never resized to match
+  the fixture's declared 6x6 bounds (stuck at the 5x5 default), so pipe
+  `(3,0)` - genuinely inside the intended 6x6 board - was rejected as
+  outside the board's *actual* (unresized) grid. `IsInsideGrid=False`.
+- `[FAIL 06/11] Dense 4-neighbor Corner hub, cross-checked against brute
+  force` - the fixture's own topology is genuinely unsolvable (brute force
+  independently found 0 solutions); this is a bad fixture, not a solver bug.
+
+**Uniqueness solver correctness is NOT in question here** - do not modify
+`CampaignUniquenessSolver2D.cs`'s search algorithm, canonical domains, AC-3,
+MRV, connectivity pruning, or memoization key/equality to chase this. Both
+failures are test-fixture-construction bugs, confirmed by the user's own
+live run.
+
+**Exact next command once the fix resumes**:
+
+```text
+YagmurRotasi2D > Phase 8 > Run Uniqueness Solver Fixture Suite
+```
+
+required result: `Uniqueness Solver Fixture Suite: 11/11 PASSED`, before
+proceeding to the Level 10 uniqueness benchmark or any further pilot
+generation.
 
 ## Notes (Phase 8A - Scalable Campaign Foundation and Pilot Generator)
 

@@ -16,12 +16,18 @@ public static class CampaignDifficultyProfiles2D
         public int GridWidth;
         public int GridHeight;
         public int MinActivePipes;
+
+        /// <summary>Phase 8A.2 Part D: the density the generator actively grows toward - ear/detour insertion stops once reached (subject to MaxActivePipes), rather than stopping at whatever a fixed small attempt count happened to produce.</summary>
+        public int PreferredActivePipes;
         public int MaxActivePipes;
         public int BranchAttempts;
         public int MinMinimumTaps;
         public int MaxMinimumTaps;
         public int DifficultyTier;
         public int ChapterNumber;
+
+        /// <summary>Phase 8A.2 Part L: every 10th level - must contain a real Tee junction and a genuine reconnecting branch/cycle, not just a long snake, once it reaches its density target.</summary>
+        public bool IsChallengeLevel;
     }
 
     public static Profile ForLevel(int levelNumber)
@@ -63,7 +69,8 @@ public static class CampaignDifficultyProfiles2D
             MinMinimumTaps = minTaps,
             MaxMinimumTaps = maxTaps,
             DifficultyTier = tier,
-            ChapterNumber = chapter
+            ChapterNumber = chapter,
+            IsChallengeLevel = isChallengeLevel
         };
 
         if (isChallengeLevel)
@@ -74,6 +81,12 @@ public static class CampaignDifficultyProfiles2D
             profile.MaxActivePipes = maxPipes;
             profile.MinActivePipes = Mathf.RoundToInt((minPipes + maxPipes) / 2f);
         }
+
+        // Part D: preferred sits a modest amount above the minimum (never
+        // above max) - close enough to min that it stays reliably reachable,
+        // far enough above it that density-growth has real headroom instead
+        // of stopping the instant the floor is technically cleared.
+        profile.PreferredActivePipes = Mathf.Min(profile.MaxActivePipes, profile.MinActivePipes + 2);
 
         return profile;
     }
