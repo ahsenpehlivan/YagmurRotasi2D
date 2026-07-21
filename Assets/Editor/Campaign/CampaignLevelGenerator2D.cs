@@ -61,6 +61,29 @@ public static class CampaignLevelGenerator2D
 
         /// <summary>Phase 8A.3 Part L: wall-clock ceiling per candidate's uniqueness search, independent of the node budget (a slow-but-shallow search could exhaust time before nodes, or vice versa). A timeout is always treated as Inconclusive (rejected), never as proof of uniqueness.</summary>
         public int MaxUniquenessElapsedMilliseconds = 2000;
+
+        /// <summary>
+        /// Phase 8 Fast-Track: when false, CampaignUniquenessSolver2D is never
+        /// invoked for this request - cheaper structural gates (no leak, full
+        /// Source reachability, in-bounds, no duplicate coordinates, unsolved
+        /// start state, active-pipe-count and minimum-tap-count within the
+        /// difficulty profile) are the acceptance gate instead. Defaults to
+        /// true so every existing caller (the original pilot batch, smoke
+        /// tests) is completely unaffected by this field's existence.
+        /// </summary>
+        public bool RequireExactUniqueness = true;
+
+        /// <summary>
+        /// Phase 8 Fast-Track: overrides the stamped generatorVersion and the
+        /// seed-derivation version string for this request. Null (default)
+        /// uses the static GeneratorVersion constant, matching every existing
+        /// caller exactly. Fast-Track requests set this to a distinct string
+        /// because skipping the uniqueness gate is itself a content-affecting
+        /// pipeline change (same reasoning as the GeneratorVersion doc
+        /// comment above) - it must never be silently indistinguishable from
+        /// an exact-uniqueness-checked "8A.3" asset in a stored hash/seed.
+        /// </summary>
+        public string GeneratorVersionOverride;
     }
 
     public sealed class GenerationResult
@@ -115,6 +138,7 @@ public static class CampaignLevelGenerator2D
 
         var stopwatch = Stopwatch.StartNew();
         string lastReason = "no attempts made";
+        string effectiveVersion = request.GeneratorVersionOverride ?? GeneratorVersion;
 
         // Part A/I (Phase 8A.2): aggregated across every failed attempt, so
         // a final failure logs ONE summary line instead of up to
@@ -123,7 +147,7 @@ public static class CampaignLevelGenerator2D
 
         for (int attempt = 0; attempt < request.MaxAttempts; attempt++)
         {
-            int seed = CampaignSeededRandom2D.DeriveAttemptSeed(request.BaseCampaignSeed, request.LevelNumber, GeneratorVersion, attempt);
+            int seed = CampaignSeededRandom2D.DeriveAttemptSeed(request.BaseCampaignSeed, request.LevelNumber, effectiveVersion, attempt);
             var rng = new CampaignSeededRandom2D(seed);
 
             CampaignLevelDefinition2D candidate = TryGenerateOnce(request, profile, seed, rng, attempt + 1, out lastReason, out CampaignGraphBuilder2D.GraphBuildDiagnostics diagnostics, out CampaignUniquenessSolver2D.UniquenessSearchDiagnostics uniquenessDiag);
@@ -473,36 +497,83 @@ public static class CampaignLevelGenerator2D
             return null;
         }
 
-        // Re-order pipes to match the real BFS-from-source discovery order -
-        // used only as CampaignUniquenessSolver2D's initial MRV tie-break
-        // seed order, not a correctness requirement (the solver reorders
-        // dynamically via its own MRV selection during search).
-        var pipesInBfsOrder = new List<PipeSpawnData2D>(pipes.Count);
-        var byPosition = new Dictionary<Vector2Int, PipeSpawnData2D>();
-        foreach (PipeSpawnData2D p in pipes) byPosition[p.gridPos] = p;
-        foreach (PipeTile2D tile in solvedOrderPipes) pipesInBfsOrder.Add(byPosition[tile.GridPosition]);
+        int solutionsFound = CampaignLevelDefinition2D.SolutionCountNotChecked;
 
-        uniquenessDiagnostics = new CampaignUniquenessSolver2D.UniquenessSearchDiagnostics();
-        CampaignUniquenessSolver2D.UniquenessOutcome outcome = CampaignUniquenessSolver2D.CountSolutions(
-            bounds, graph.Source, graph.SourceOutputDirection, graph.Target, graph.TargetEntryDirection,
-            pipesInBfsOrder, request.MaxUniquenessSearchNodes, out int solutionsFound,
-            request.MaxUniquenessElapsedMilliseconds, uniquenessDiagnostics);
-
-        if (outcome != CampaignUniquenessSolver2D.UniquenessOutcome.One)
+        if (request.RequireExactUniqueness)
         {
-            if (outcome == CampaignUniquenessSolver2D.UniquenessOutcome.Zero)
+            // Re-order pipes to match the real BFS-from-source discovery
+            // order - used only as CampaignUniquenessSolver2D's initial MRV
+            // tie-break seed order, not a correctness requirement (the
+            // solver reorders dynamically via its own MRV selection during
+            // search). Only needed when the solver actually runs.
+            var pipesInBfsOrder = new List<PipeSpawnData2D>(pipes.Count);
+            var byPosition = new Dictionary<Vector2Int, PipeSpawnData2D>();
+            foreach (PipeSpawnData2D p in pipes) byPosition[p.gridPos] = p;
+            foreach (PipeTile2D tile in solvedOrderPipes) pipesInBfsOrder.Add(byPosition[tile.GridPosition]);
+
+            uniquenessDiagnostics = new CampaignUniquenessSolver2D.UniquenessSearchDiagnostics();
+            CampaignUniquenessSolver2D.UniquenessOutcome outcome = CampaignUniquenessSolver2D.CountSolutions(
+                bounds, graph.Source, graph.SourceOutputDirection, graph.Target, graph.TargetEntryDirection,
+                pipesInBfsOrder, request.MaxUniquenessSearchNodes, out solutionsFound,
+                request.MaxUniquenessElapsedMilliseconds, uniquenessDiagnostics);
+
+            if (outcome != CampaignUniquenessSolver2D.UniquenessOutcome.One)
             {
-                rejectionReason = "uniqueness solver found 0 solutions (should be impossible - solved layout already validated)";
+                if (outcome == CampaignUniquenessSolver2D.UniquenessOutcome.Zero)
+                {
+                    rejectionReason = "uniqueness solver found 0 solutions (should be impossible - solved layout already validated)";
+                }
+                else if (outcome == CampaignUniquenessSolver2D.UniquenessOutcome.TwoOrMore)
+                {
+                    rejectionReason = $"solution not unique ({solutionsFound}+ valid rotation assignments found)";
+                }
+                else
+                {
+                    rejectionReason = "uniqueness check inconclusive (search budget exceeded)";
+                }
+                return null;
             }
-            else if (outcome == CampaignUniquenessSolver2D.UniquenessOutcome.TwoOrMore)
+        }
+        else
+        {
+            // Phase 8 Fast-Track acceptance: the expensive exact uniqueness
+            // solver is never invoked here. "Solved layout reaches Target",
+            // "has no leak" and "every production pipe is Source-reachable"
+            // were already established above via the real, unchanged
+            // FlowSolver2D (solvedResult.IsSuccess/HasLeak/ReachableTiles) -
+            // the checks below restate the leak/bounds/duplicate guarantees
+            // explicitly as a hard gate (defense-in-depth on top of what the
+            // graph builder already guarantees by construction) and add the
+            // one check that ISN'T already implied by an earlier gate: final
+            // active pipe count against the difficulty profile. Never treats
+            // a disconnected filler pipe as valid - every check here is a
+            // hard rejection, not a warning.
+            if (solvedResult.HasLeak)
             {
-                rejectionReason = $"solution not unique ({solutionsFound}+ valid rotation assignments found)";
+                rejectionReason = $"solved layout has a leak (FailureReason={solvedResult.FailureReason})";
+                return null;
             }
-            else
+
+            var seenPositions = new HashSet<Vector2Int>();
+            foreach (PipeSpawnData2D pipe in pipes)
             {
-                rejectionReason = "uniqueness check inconclusive (search budget exceeded)";
+                if (!bounds.Contains(pipe.gridPos))
+                {
+                    rejectionReason = $"pipe at {pipe.gridPos} is outside the {bounds.Width}x{bounds.Height} board bounds";
+                    return null;
+                }
+                if (!seenPositions.Add(pipe.gridPos))
+                {
+                    rejectionReason = $"duplicate pipe coordinate {pipe.gridPos}";
+                    return null;
+                }
             }
-            return null;
+
+            if (pipes.Count < profile.MinActivePipes || pipes.Count > profile.MaxActivePipes)
+            {
+                rejectionReason = $"active pipe count {pipes.Count} outside profile range [{profile.MinActivePipes},{profile.MaxActivePipes}]";
+                return null;
+            }
         }
 
         (int twoStarScore, int threeStarScore) = CampaignMetrics2D.ComputeScoreThresholds(minimumTaps, pipes.Count);
@@ -519,7 +590,7 @@ public static class CampaignLevelGenerator2D
         definition.targetCell = graph.Target;
         definition.targetEntryDirection = graph.TargetEntryDirection;
         definition.deterministicSeed = seed;
-        definition.generatorVersion = GeneratorVersion;
+        definition.generatorVersion = request.GeneratorVersionOverride ?? GeneratorVersion;
         definition.difficultyTier = profile.DifficultyTier;
         definition.educationalMessage = request.EducationalMessage;
         definition.twoStarScore = twoStarScore;

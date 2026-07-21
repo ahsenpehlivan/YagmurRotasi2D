@@ -136,8 +136,12 @@ public static class InGameMenuPrefabBuilder
                 shPinscherFont, "Bölümü Yeniden Başlat", y2);
             Button settingsButton = SetupMenuButton(mainMenuPage.transform, "SettingsButton", buttonBase, buttonInlay, buttonPressed,
                 shPinscherFont, "Ayarlar", y3);
+            // Phase 9A: gameplay Back now returns to LevelSelectScene2D, not
+            // MainMenuScene2D (see UIManager2D.HandleReturnToLevelSelectRequested) -
+            // relabeled to match. The GameObject/field name (mainMenuButton) is
+            // left unchanged so existing serialized wiring never breaks.
             Button mainMenuButton = SetupMenuButton(mainMenuPage.transform, "MainMenuButton", buttonBase, buttonInlay, buttonPressed,
-                shPinscherFont, "Ana Menüye Dön", y4);
+                shPinscherFont, "Bölüm Seçimine Dön", y4);
 
             log.Add("MainMenuPage: TitleBadge='Menü', buttons=ContinueButton/RestartButton/SettingsButton/MainMenuButton " +
                 $"(base='{buttonBase.name}', inset='{buttonInlay?.name}', pressed='{buttonPressed?.name}').");

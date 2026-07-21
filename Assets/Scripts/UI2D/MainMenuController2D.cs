@@ -31,7 +31,8 @@ namespace YagmurRotasi2D.UI2D
         [SerializeField] private Button confirmResetButton;
         [SerializeField] private Button cancelResetButton;
 
-        [SerializeField] private string gameplaySceneName = "GameScene2D";
+        [Tooltip("Phase 9A: Oyuna Başla now opens the level-select screen instead of loading gameplay directly.")]
+        [SerializeField] private string levelSelectSceneName = "LevelSelectScene2D";
 
         private bool listenersRegistered;
 
@@ -71,11 +72,12 @@ namespace YagmurRotasi2D.UI2D
             // Prevents a double-click from triggering a second LoadScene call.
             if (playButton != null) playButton.interactable = false;
 
-            // GameProgress2D.CurrentLevel already defaults safely to 1 and is
-            // clamped to the valid level range - LevelManager2D.Start() reads it
-            // directly when GameScene2D loads, so nothing further needs to be
-            // stored here.
-            SceneManager.LoadScene(gameplaySceneName);
+            // Phase 9A: opens the level-select screen instead of loading
+            // gameplay directly - the player now always explicitly picks a
+            // level (CampaignSession2D) before GameScene2D loads. Nothing needs
+            // to be stored here; LevelSelectScene2D reads the campaign catalog
+            // itself.
+            SceneManager.LoadScene(levelSelectSceneName);
         }
 
         private void HandleSettingsPressed()

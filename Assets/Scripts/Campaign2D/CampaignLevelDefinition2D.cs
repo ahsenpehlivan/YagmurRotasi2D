@@ -18,6 +18,9 @@ namespace YagmurRotasi2D.Campaign2D
     [CreateAssetMenu(fileName = "CampaignLevel", menuName = "YagmurRotasi2D/Campaign Level Definition")]
     public class CampaignLevelDefinition2D : ScriptableObject
     {
+        /// <summary>Sentinel for solutionCount meaning "exact uniqueness was intentionally not checked" (Phase 8 Fast-Track generation skips the expensive CampaignUniquenessSolver2D search) - distinct from a real computed value, which is always >= 1 for an accepted level.</summary>
+        public const int SolutionCountNotChecked = -1;
+
         [Header("Identity")]
         public string stableLevelId;
         public int levelNumber;

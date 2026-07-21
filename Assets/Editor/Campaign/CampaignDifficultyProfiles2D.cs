@@ -2,12 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// Per-level generation parameters, keyed by level number, implementing the
-/// campaign difficulty plan (Part O/P): Levels 1-10 = 5x5, 11-25 = 6x6,
-/// 26-40 = 7x7, 41-60 = 8x8, 61-80 = 9x9, 81-100 = 10x10, every tenth level
-/// using the upper end of its tier's range. Phase 8A only ever calls this for
-/// Levels 7-20 (Levels 1-6 are hand-authored and excluded from generation
-/// entirely) - the table already covers the full 1-100 range so Phase 8B can
-/// reuse it unchanged for Levels 21-100.
+/// Phase 8 Fast-Track campaign difficulty plan: Levels 1-10 = 5x5 (7-10 are
+/// generated, 1-6 are hand-authored), 11-25 = 6x6, 26-45 = 7x7, 46-65 = 8x8,
+/// 66-85 = 9x9, 86-100 = 10x10, every tenth level using the upper end of its
+/// tier's range. Levels 1-6 are hand-authored and excluded from generation
+/// entirely - this table is never called for them.
 /// </summary>
 public static class CampaignDifficultyProfiles2D
 {
@@ -42,15 +41,15 @@ public static class CampaignDifficultyProfiles2D
         {
             return Tier(6, 6, 12, 22, 5, 8, 15, tier: 2, chapter: 2, isChallengeLevel);
         }
-        if (levelNumber <= 40)
+        if (levelNumber <= 45)
         {
             return Tier(7, 7, 16, 30, 7, 12, 20, tier: 3, chapter: 3, isChallengeLevel);
         }
-        if (levelNumber <= 60)
+        if (levelNumber <= 65)
         {
             return Tier(8, 8, 22, 40, 9, 18, 28, tier: 4, chapter: 4, isChallengeLevel);
         }
-        if (levelNumber <= 80)
+        if (levelNumber <= 85)
         {
             return Tier(9, 9, 28, 50, 11, 24, 38, tier: 5, chapter: 5, isChallengeLevel);
         }

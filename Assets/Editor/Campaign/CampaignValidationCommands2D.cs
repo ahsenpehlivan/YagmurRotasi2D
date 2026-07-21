@@ -118,7 +118,8 @@ public static class CampaignValidationCommands2D
         return failCount == 0;
     }
 
-    private static void ValidateOneLevel(CampaignLevelDefinition2D def, int expectedLevelNumber, HashSet<int> seenLevelNumbers, List<string> problems, List<GameObject> spawned)
+    /// <summary>Internal (not private) so CampaignFastTrackValidationCommands2D (Phase 8 Fast-Track) can reuse this EXACT same structural check for Levels 1-100, instead of a second, potentially-drifting copy.</summary>
+    internal static void ValidateOneLevel(CampaignLevelDefinition2D def, int expectedLevelNumber, HashSet<int> seenLevelNumbers, List<string> problems, List<GameObject> spawned)
     {
         if (def.levelNumber != expectedLevelNumber)
         {

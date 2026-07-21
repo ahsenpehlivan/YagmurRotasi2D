@@ -37,7 +37,9 @@ public static class SuccessPanelPrefabBuilder
     // with a clean 20px bottom margin - the only deliberate deviation from the
     // spec's suggested sizes, needed purely for arithmetic consistency.
     private const float MainPanelWidth = 780f;
-    private const float MainPanelHeight = 950f;
+    // Phase 9B: grown from 950 to fit the new StatsText row (score/moves)
+    // inserted between StarTray and the button row.
+    private const float MainPanelHeight = 1020f;
     private const float MainPanelInset = 28f;
 
     private const float TitleBadgeWidth = 560f;
@@ -64,10 +66,17 @@ public static class SuccessPanelPrefabBuilder
     private const float StarUnearnedAlpha = 0.3f;
     private const float StarBackgroundAlpha = 0.45f;
 
-    private const float ButtonWidth = 460f;
+    // Phase 9B: narrowed again (Phase 9A's 340f pair -> 230f triple) so
+    // NextLevelButton, RetryButton and ReturnToLevelSelectButton fit side by
+    // side in one row within MainPanelWidth (780f).
+    private const float ButtonWidth = 230f;
     private const float ButtonHeight = 130f;
     private const float ButtonInset = 10f;
     private const float ButtonGapAboveMargin = 30f;
+    private const float ButtonTripleOffsetX = 260f;
+
+    private const float StatsTextHeight = 50f;
+    private const float StatsGapAboveMargin = 16f;
 
     // Phase 7E.7: BodyText readability - Best Fit between these two sizes.
     private const int BodyTextMinSize = 32;
@@ -244,10 +253,18 @@ public static class SuccessPanelPrefabBuilder
                 string.Join("\n", starLog) +
                 $"\n  Star sprite path: {UiFolder}/Stars/star.png");
 
-            // ---------------- NextLevelButton ----------------
-            float buttonTop = starTrayTop - (StarTrayHeight + ButtonGapAboveMargin);
+            // ---------------- StatsText (Phase 9B: score/moves - no time field, this project has no timer system) ----------------
+            float statsTop = starTrayTop - (StarTrayHeight + StatsGapAboveMargin);
+            GameObject statsTextGO = FindOrCreateChild(mainPanel.transform, "StatsText");
+            SetAnchoredRect(RectOf(statsTextGO), TopCenter, TopCenter, TopCenter, new Vector2(0f, statsTop), new Vector2(BodyPanelWidth, StatsTextHeight));
+            Text statsText = SetupText(statsTextGO, "Skor: 0   Hamle: 0", shPinscherFont, 32, Color.black, TextAnchor.MiddleCenter, false);
+            log.Add($"StatsText: plain Text (no background panel), '{shPinscherFont.name}' size 32 - shows score/move count set by UIManager2D.HandleAnimationComplete.");
+
+            // ---------------- NextLevelButton / RetryButton / ReturnToLevelSelectButton (Phase 9B: one row of three) ----------------
+            float buttonTop = statsTop - (StatsTextHeight + ButtonGapAboveMargin);
+
             GameObject nextLevelButtonGO = FindOrCreateChild(mainPanel.transform, "NextLevelButton");
-            SetAnchoredRect(RectOf(nextLevelButtonGO), TopCenter, TopCenter, TopCenter, new Vector2(0f, buttonTop), new Vector2(ButtonWidth, ButtonHeight));
+            SetAnchoredRect(RectOf(nextLevelButtonGO), TopCenter, TopCenter, TopCenter, new Vector2(-ButtonTripleOffsetX, buttonTop), new Vector2(ButtonWidth, ButtonHeight));
             Image buttonImage = SetupImage(nextLevelButtonGO, buttonBase, true, Color.white);
 
             Button button = nextLevelButtonGO.GetComponent<Button>();
@@ -271,9 +288,73 @@ public static class SuccessPanelPrefabBuilder
 
             GameObject labelGO = FindOrCreateChild(nextLevelButtonGO.transform, "Label");
             StretchFill(RectOf(labelGO), 0f);
-            Text label = SetupText(labelGO, "Sonraki Bölüm", shPinscherFont, 44, Color.white, TextAnchor.MiddleCenter, false);
+            Text label = SetupText(labelGO, "Sonraki Bölüm", shPinscherFont, 28, Color.white, TextAnchor.MiddleCenter, true,
+                bestFit: true, minSize: 16, maxSize: 28);
             log.Add($"NextLevelButton: base='{buttonBase.name}', inset='{buttonInlay?.name}', pressed='{buttonPressed?.name}' " +
-                $"({UiFolder}/Buttons/brown(+_inlay/_pressed).png), transition={button.transition}, Label uses '{shPinscherFont.name}' size 44.");
+                $"({UiFolder}/Buttons/brown(+_inlay/_pressed).png), transition={button.transition}, Label uses '{shPinscherFont.name}' Best Fit 16-28.");
+
+            // Phase 9B: center button - "Tekrar Oyna" replays the just-completed level (same action as the pause menu's Restart).
+            GameObject retryButtonGO = FindOrCreateChild(mainPanel.transform, "RetryButton");
+            SetAnchoredRect(RectOf(retryButtonGO), TopCenter, TopCenter, TopCenter, new Vector2(0f, buttonTop), new Vector2(ButtonWidth, ButtonHeight));
+            Image retryButtonImage = SetupImage(retryButtonGO, buttonBase, true, Color.white);
+
+            Button retryButton = retryButtonGO.GetComponent<Button>();
+            if (retryButton == null) retryButton = retryButtonGO.AddComponent<Button>();
+            retryButton.targetGraphic = retryButtonImage;
+            if (buttonPressed != null)
+            {
+                retryButton.transition = Selectable.Transition.SpriteSwap;
+                SpriteState retryState = retryButton.spriteState;
+                retryState.pressedSprite = buttonPressed;
+                retryState.highlightedSprite = buttonBase;
+                retryState.selectedSprite = buttonBase;
+                retryState.disabledSprite = buttonBase;
+                retryButton.spriteState = retryState;
+            }
+
+            GameObject retryButtonInset = FindOrCreateChild(retryButtonGO.transform, "ButtonInset");
+            StretchFill(RectOf(retryButtonInset), ButtonInset);
+            SetupImage(retryButtonInset, buttonInlay, false, Color.white);
+            retryButtonInset.transform.SetAsFirstSibling();
+
+            GameObject retryLabelGO = FindOrCreateChild(retryButtonGO.transform, "Label");
+            StretchFill(RectOf(retryLabelGO), 0f);
+            Text retryLabel = SetupText(retryLabelGO, "Tekrar Oyna", shPinscherFont, 28, Color.white, TextAnchor.MiddleCenter, true,
+                bestFit: true, minSize: 16, maxSize: 28);
+            log.Add($"RetryButton: base='{buttonBase.name}', inset='{buttonInlay?.name}', pressed='{buttonPressed?.name}' " +
+                $"({UiFolder}/Buttons/brown(+_inlay/_pressed).png), transition={retryButton.transition}, Label uses '{shPinscherFont.name}' Best Fit 16-28.");
+
+            // Phase 9A: third button, hidden entirely (not just disabled) on
+            // the last campaign level - see SuccessPanelView2D.Show(hasNextLevel).
+            GameObject returnButtonGO = FindOrCreateChild(mainPanel.transform, "ReturnToLevelSelectButton");
+            SetAnchoredRect(RectOf(returnButtonGO), TopCenter, TopCenter, TopCenter, new Vector2(ButtonTripleOffsetX, buttonTop), new Vector2(ButtonWidth, ButtonHeight));
+            Image returnButtonImage = SetupImage(returnButtonGO, buttonBase, true, Color.white);
+
+            Button returnButton = returnButtonGO.GetComponent<Button>();
+            if (returnButton == null) returnButton = returnButtonGO.AddComponent<Button>();
+            returnButton.targetGraphic = returnButtonImage;
+            if (buttonPressed != null)
+            {
+                returnButton.transition = Selectable.Transition.SpriteSwap;
+                SpriteState returnState = returnButton.spriteState;
+                returnState.pressedSprite = buttonPressed;
+                returnState.highlightedSprite = buttonBase;
+                returnState.selectedSprite = buttonBase;
+                returnState.disabledSprite = buttonBase;
+                returnButton.spriteState = returnState;
+            }
+
+            GameObject returnButtonInset = FindOrCreateChild(returnButtonGO.transform, "ButtonInset");
+            StretchFill(RectOf(returnButtonInset), ButtonInset);
+            SetupImage(returnButtonInset, buttonInlay, false, Color.white);
+            returnButtonInset.transform.SetAsFirstSibling();
+
+            GameObject returnLabelGO = FindOrCreateChild(returnButtonGO.transform, "Label");
+            StretchFill(RectOf(returnLabelGO), 0f);
+            Text returnLabel = SetupText(returnLabelGO, "Bölüm Seçimine Dön", shPinscherFont, 24, Color.white, TextAnchor.MiddleCenter, true,
+                bestFit: true, minSize: 14, maxSize: 24);
+            log.Add($"ReturnToLevelSelectButton: base='{buttonBase.name}', inset='{buttonInlay?.name}', pressed='{buttonPressed?.name}' " +
+                $"({UiFolder}/Buttons/brown(+_inlay/_pressed).png), transition={returnButton.transition}, Label uses '{shPinscherFont.name}' Best Fit 16-28.");
 
             // ---------------- SuccessPanelView2D wiring ----------------
             var view = prefabRoot.GetComponent<SuccessPanelView2D>();
@@ -284,6 +365,7 @@ public static class SuccessPanelPrefabBuilder
             viewSO.FindProperty("canvasGroup").objectReferenceValue = canvasGroup;
             viewSO.FindProperty("titleText").objectReferenceValue = titleText;
             viewSO.FindProperty("bodyText").objectReferenceValue = bodyText;
+            viewSO.FindProperty("statsText").objectReferenceValue = statsText;
             SerializedProperty starImagesProp = viewSO.FindProperty("starImages");
             starImagesProp.arraySize = starImages.Count;
             for (int i = 0; i < starImages.Count; i++)
@@ -291,6 +373,8 @@ public static class SuccessPanelPrefabBuilder
                 starImagesProp.GetArrayElementAtIndex(i).objectReferenceValue = starImages[i];
             }
             viewSO.FindProperty("nextLevelButton").objectReferenceValue = button;
+            viewSO.FindProperty("retryButton").objectReferenceValue = retryButton;
+            viewSO.FindProperty("returnToLevelSelectButton").objectReferenceValue = returnButton;
             viewSO.FindProperty("earnedStarAlpha").floatValue = 1f;
             viewSO.FindProperty("unearnedStarAlpha").floatValue = StarUnearnedAlpha;
             viewSO.ApplyModifiedPropertiesWithoutUndo();
@@ -313,7 +397,8 @@ public static class SuccessPanelPrefabBuilder
                 Debug.Log($"SuccessPanelPrefabBuilder: {(prefabExists ? "updated" : "created")} '{PrefabPath}'.\n" +
                     "Hierarchy: SuccessPanel2D > ModalBlocker, PanelShadow, MainPanel > MainPanelInset, TitleBadge > " +
                     "TitleBadgeInset, TitleText; BodyPanel > BodyPanelInset, BodyText; StarTray > StarTrayInset, " +
-                    "StarRow > StarSlot_0..2 > StarBackground, Star_N; NextLevelButton > ButtonInset, Label.\n" +
+                    "StarRow > StarSlot_0..2 > StarBackground, Star_N; StatsText (Phase 9B - score/moves); " +
+                    "NextLevelButton, RetryButton, ReturnToLevelSelectButton (Phase 9B - one row of three) each > ButtonInset, Label.\n" +
                     string.Join("\n", log));
             }
         }

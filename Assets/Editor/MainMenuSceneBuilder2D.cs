@@ -34,6 +34,9 @@ public static class MainMenuSceneBuilder2D
     private const string GameplaySceneName = "GameScene2D";
     private const string GameplayScenePath = "Assets/Scenes/GameScene2D.unity";
 
+    // Phase 9A: Oyuna Başla now opens LevelSelectScene2D instead of GameScene2D directly.
+    private const string LevelSelectSceneName = "LevelSelectScene2D";
+
     private const string MainMenuArtFolder = "Assets/Art2D/FinalSprites/MainMenu";
     private const string BackgroundPath = MainMenuArtFolder + "/Background/MainMenu.png";
     private const string PlaySpritePath = MainMenuArtFolder + "/Buttons/startGame.png";
@@ -112,7 +115,8 @@ public static class MainMenuSceneBuilder2D
         var scaler = canvasGO.GetComponent<CanvasScaler>();
         if (scaler == null) scaler = canvasGO.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1080f, 1920f);
+        // Phase 9B: landscape-first primary design resolution (was 1080x1920 portrait).
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
 
@@ -123,24 +127,48 @@ public static class MainMenuSceneBuilder2D
         StretchFill(RectOf(safeAreaRoot), 0f);
         if (safeAreaRoot.GetComponent<SafeAreaFitter2D>() == null) safeAreaRoot.AddComponent<SafeAreaFitter2D>();
 
+        // ---------------- Shared Phase 9B responsive services ----------------
+        WebViewportState2D viewportState = canvasGO.GetComponent<WebViewportState2D>();
+        if (viewportState == null) viewportState = canvasGO.AddComponent<WebViewportState2D>();
+        WebFullscreenController2D fullscreenController = canvasGO.GetComponent<WebFullscreenController2D>();
+        if (fullscreenController == null) fullscreenController = canvasGO.AddComponent<WebFullscreenController2D>();
+
         // ---------------- MainMenuBackground ----------------
+        // Phase 9B: the existing MainMenu.png source art is portrait
+        // (941x1672) - there is no landscape-specific background asset in
+        // the project yet. AspectRatioFitter.EnvelopeParent gives true
+        // "cover" behavior (fills the viewport, preserves aspect, crops
+        // overflow) instead of the old disproportionate stretch - the least
+        // distorted option available with the CURRENT asset. Revisit once a
+        // landscape-native background exists.
         GameObject background = FindOrCreateChild(safeAreaRoot.transform, "MainMenuBackground");
         StretchFill(RectOf(background), 0f);
         background.transform.SetAsFirstSibling();
         Image backgroundImage = SetupImage(background, backgroundSprite, false, Color.white);
-        backgroundImage.preserveAspect = false; // deliberate stretch-to-cover; see class doc for why this is safe here.
+        backgroundImage.preserveAspect = false;
+        var backgroundFitter = background.GetComponent<AspectRatioFitter>();
+        if (backgroundFitter == null) backgroundFitter = background.AddComponent<AspectRatioFitter>();
+        backgroundFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        backgroundFitter.aspectRatio = backgroundSprite.rect.width / backgroundSprite.rect.height;
 
-        // ---------------- MainMenuContent / MainButtonRoot ----------------
+        // Subtle dark readability overlay so menu text/cards stay legible
+        // over whichever part of the (now cropped) background shows through.
+        GameObject readabilityOverlay = FindOrCreateChild(safeAreaRoot.transform, "ReadabilityOverlay");
+        StretchFill(RectOf(readabilityOverlay), 0f);
+        SetupImage(readabilityOverlay, null, false, new Color(0f, 0f, 0f, 0.22f));
+        readabilityOverlay.transform.SetSiblingIndex(1);
+
+        // ---------------- MainMenuContent / MainButtonRoot (Phase 9B: side-aligned max-width panel, not a centered portrait column) ----------------
         GameObject content = FindOrCreateChild(safeAreaRoot.transform, "MainMenuContent");
         StretchFill(RectOf(content), 0f);
 
         GameObject buttonRoot = FindOrCreateChild(content.transform, "MainButtonRoot");
         RectTransform buttonRootRt = RectOf(buttonRoot);
-        buttonRootRt.anchorMin = new Vector2(0.5f, 0f);
-        buttonRootRt.anchorMax = new Vector2(0.5f, 0f);
-        buttonRootRt.pivot = new Vector2(0.5f, 0f);
-        buttonRootRt.sizeDelta = new Vector2(MainButtonWidth + 50f, MainButtonHeight * 3f + MainButtonSpacing * 2f);
-        buttonRootRt.anchoredPosition = new Vector2(0f, 180f);
+        buttonRootRt.anchorMin = new Vector2(1f, 0.5f);
+        buttonRootRt.anchorMax = new Vector2(1f, 0.5f);
+        buttonRootRt.pivot = new Vector2(1f, 0.5f);
+        buttonRootRt.sizeDelta = new Vector2(MainButtonWidth + 60f, MainButtonHeight * 4f + MainButtonSpacing * 3f);
+        buttonRootRt.anchoredPosition = new Vector2(-120f, 0f);
 
         var layout = buttonRoot.GetComponent<VerticalLayoutGroup>();
         if (layout == null) layout = buttonRoot.AddComponent<VerticalLayoutGroup>();
@@ -154,6 +182,12 @@ public static class MainMenuSceneBuilder2D
         Button playButton = SetupMainButton(buttonRoot.transform, "PlayButton", playSprite, 0);
         Button settingsButton = SetupMainButton(buttonRoot.transform, "SettingsButton", settingsSprite, 1);
         Button resetProgressButton = SetupMainButton(buttonRoot.transform, "ResetProgressButton", resetSprite, 2);
+
+        // ---------------- Fullscreen button (Phase 9B) ----------------
+        Button fullscreenButton = SetupSimpleButton(safeAreaRoot.transform, "FullscreenButton", buttonBase, buttonInlay,
+            shPinscherFont, "Tam Ekran", new Vector2(1f, 1f), new Vector2(-32f, -32f), new Vector2(180f, 76f));
+        fullscreenButton.onClick.RemoveAllListeners();
+        fullscreenButton.onClick.AddListener(fullscreenController.ToggleFullscreen);
 
         // ---------------- SettingsPanel ----------------
         GameObject settingsPanel = FindOrCreateChild(safeAreaRoot.transform, "SettingsPanel");
@@ -260,7 +294,7 @@ public static class MainMenuSceneBuilder2D
         so.FindProperty("settingsCloseButton").objectReferenceValue = settingsCloseButton;
         so.FindProperty("confirmResetButton").objectReferenceValue = confirmResetButton;
         so.FindProperty("cancelResetButton").objectReferenceValue = cancelResetButton;
-        so.FindProperty("gameplaySceneName").stringValue = GameplaySceneName;
+        so.FindProperty("levelSelectSceneName").stringValue = LevelSelectSceneName;
         so.ApplyModifiedPropertiesWithoutUndo();
 
         EditorUtility.SetDirty(controller);
@@ -342,43 +376,10 @@ public static class MainMenuSceneBuilder2D
         return true;
     }
 
+    /// <summary>Phase 9B: delegates to the single shared WebBuildConfig2D.EnsureSceneOrder (was a divergent local copy that only knew about 2 of the 3 scenes - the Phase 9B audit found this drift had left LevelSelectScene2D out of Build Settings entirely).</summary>
     private static void EnsureBuildSettings(bool logDetails)
     {
-        var scenes = EditorBuildSettings.scenes.ToList();
-
-        EditorBuildSettingsScene menuScene = scenes.FirstOrDefault(s => s.path == ScenePath);
-        if (menuScene == null)
-        {
-            menuScene = new EditorBuildSettingsScene(ScenePath, true);
-        }
-        else
-        {
-            scenes.Remove(menuScene);
-            menuScene.enabled = true;
-        }
-
-        EditorBuildSettingsScene gameScene = scenes.FirstOrDefault(s => s.path == GameplayScenePath);
-        if (gameScene == null)
-        {
-            gameScene = new EditorBuildSettingsScene(GameplayScenePath, true);
-        }
-        else
-        {
-            scenes.Remove(gameScene);
-            gameScene.enabled = true;
-        }
-
-        // MainMenuScene2D first, GameScene2D second, then every other
-        // pre-existing scene preserved (not removed) after them.
-        var finalList = new System.Collections.Generic.List<EditorBuildSettingsScene> { menuScene, gameScene };
-        finalList.AddRange(scenes);
-        EditorBuildSettings.scenes = finalList.ToArray();
-
-        if (logDetails)
-        {
-            Debug.Log("MainMenuSceneBuilder2D: Build Settings scene order:\n" +
-                string.Join("\n", finalList.Select((s, i) => $"  [{i}] {s.path} (enabled={s.enabled})")));
-        }
+        WebBuildConfig2D.EnsureSceneOrder(logDetails);
     }
 
     private static Button SetupMainButton(Transform parent, string name, Sprite sprite, int siblingIndex)

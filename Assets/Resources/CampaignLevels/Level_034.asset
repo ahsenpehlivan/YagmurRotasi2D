@@ -1,0 +1,140 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee0fa64d924f7547b2595477b482cd7, type: 3}
+  m_Name: Level_034
+  m_EditorClassIdentifier: Assembly-CSharp::YagmurRotasi2D.Campaign2D.CampaignLevelDefinition2D
+  stableLevelId: level-034
+  levelNumber: 34
+  displayName: "Kampanya B\xF6l\xFCm\xFC 34"
+  chapterNumber: 3
+  gridWidth: 7
+  gridHeight: 7
+  sourceCell: {x: -3, y: 3}
+  sourceOutputDirection: 1
+  targetCell: {x: 3, y: -3}
+  targetEntryDirection: 0
+  deterministicSeed: 1520055923
+  generatorVersion: FastTrack.1
+  difficultyTier: 3
+  educationalMessage: "Her boru par\xE7as\u0131 suyun do\u011Fru y\xF6ne akmas\u0131
+    i\xE7in do\u011Fru \u015Fekilde \xE7evrilmelidir."
+  twoStarScore: 227
+  threeStarScore: 315
+  minimumRequiredTaps: 16
+  solvedReachablePipeCount: 20
+  flowWaveCount: 11
+  solutionCount: -1
+  branchCount: 2
+  cycleCount: 2
+  difficultyScore: 111.5
+  contentHash: 5B17BDA99849DF484F9FD918F70579044E9058AEBF44EC4AF4819CFEDB6FC9AF
+  pipes:
+  - pipeType: 1
+    gridPos: {x: -2, y: -2}
+    startRotationIndex: 1
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -2, y: -1}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -2, y: 0}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -2, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -2, y: 2}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 2
+    gridPos: {x: -2, y: 3}
+    startRotationIndex: 3
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: -1, y: -2}
+    startRotationIndex: 3
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -1, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -1, y: 0}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 2
+    gridPos: {x: -1, y: 1}
+    startRotationIndex: 2
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -1, y: 2}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: -1, y: 3}
+    startRotationIndex: 1
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 0, y: -2}
+    startRotationIndex: 1
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 0, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 0, y: 0}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: 0, y: 1}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 1, y: -2}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -1}
+    startRotationIndex: 3
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 2, y: -2}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 3, y: -2}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0

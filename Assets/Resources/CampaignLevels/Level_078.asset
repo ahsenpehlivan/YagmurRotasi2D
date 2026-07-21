@@ -1,0 +1,200 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee0fa64d924f7547b2595477b482cd7, type: 3}
+  m_Name: Level_078
+  m_EditorClassIdentifier: Assembly-CSharp::YagmurRotasi2D.Campaign2D.CampaignLevelDefinition2D
+  stableLevelId: level-078
+  levelNumber: 78
+  displayName: "Kampanya B\xF6l\xFCm\xFC 78"
+  chapterNumber: 5
+  gridWidth: 9
+  gridHeight: 9
+  sourceCell: {x: -4, y: 4}
+  sourceOutputDirection: 1
+  targetCell: {x: 4, y: -4}
+  targetEntryDirection: 0
+  deterministicSeed: 1520098213
+  generatorVersion: FastTrack.1
+  difficultyTier: 5
+  educationalMessage: "Do\u011Fru planlanm\u0131\u015F bir su a\u011F\u0131, hem
+    parklar\u0131 sular hem de ta\u015Fk\u0131nlar\u0131 \xF6nler."
+  twoStarScore: 306
+  threeStarScore: 423
+  minimumRequiredTaps: 25
+  solvedReachablePipeCount: 32
+  flowWaveCount: 16
+  solutionCount: -1
+  branchCount: 4
+  cycleCount: 4
+  difficultyScore: 187.4
+  contentHash: 4D150DDECCC50683E09D9EBE51ED27D61BEEDC67F18746016E35CAE7618DB3EA
+  pipes:
+  - pipeType: 1
+    gridPos: {x: -4, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -4, y: 0}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -4, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -4, y: 2}
+    startRotationIndex: 3
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: -4, y: 3}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -3, y: -1}
+    startRotationIndex: 1
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -3, y: 0}
+    startRotationIndex: 0
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -3, y: 1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -3, y: 2}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 2
+    gridPos: {x: -3, y: 3}
+    startRotationIndex: 0
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: -3, y: 4}
+    startRotationIndex: 1
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -2, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: -2, y: 0}
+    startRotationIndex: 3
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 3
+    gridPos: {x: -2, y: 1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -2, y: 2}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 0
+    gridPos: {x: -2, y: 3}
+    startRotationIndex: 2
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: -2, y: 4}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -1, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -1, y: 0}
+    startRotationIndex: 2
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -1, y: 1}
+    startRotationIndex: 3
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 0, y: -1}
+    startRotationIndex: 2
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 0, y: 0}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -4}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -3}
+    startRotationIndex: 2
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -2}
+    startRotationIndex: 1
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -1}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 2, y: -4}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 2, y: -3}
+    startRotationIndex: 2
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 2, y: -2}
+    startRotationIndex: 0
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 3, y: -4}
+    startRotationIndex: 3
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 3, y: -3}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 4, y: -3}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0

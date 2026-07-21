@@ -1,0 +1,140 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ee0fa64d924f7547b2595477b482cd7, type: 3}
+  m_Name: Level_020
+  m_EditorClassIdentifier: Assembly-CSharp::YagmurRotasi2D.Campaign2D.CampaignLevelDefinition2D
+  stableLevelId: level-020
+  levelNumber: 20
+  displayName: "Kampanya B\xF6l\xFCm\xFC 20"
+  chapterNumber: 2
+  gridWidth: 6
+  gridHeight: 6
+  sourceCell: {x: -2, y: 3}
+  sourceOutputDirection: 1
+  targetCell: {x: 3, y: -2}
+  targetEntryDirection: 0
+  deterministicSeed: 1520042465
+  generatorVersion: FastTrack.1
+  difficultyTier: 2
+  educationalMessage: "Toplanan ya\u011Fmur suyu, \u015Fehir a\u011Fa\xE7lar\u0131n\u0131n
+    ve \xE7i\xE7eklerin ya\u015Famas\u0131 i\xE7in de\u011Ferlidir."
+  twoStarScore: 227
+  threeStarScore: 315
+  minimumRequiredTaps: 13
+  solvedReachablePipeCount: 20
+  flowWaveCount: 9
+  solutionCount: -1
+  branchCount: 3
+  cycleCount: 3
+  difficultyScore: 111.5
+  contentHash: AFB5C9809804A2A29E0BF6BB3FF0C68B3FB03020905FA488839D5B4394DA8C6E
+  pipes:
+  - pipeType: 1
+    gridPos: {x: -2, y: 0}
+    startRotationIndex: 3
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: -2, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: -2, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -1, y: 0}
+    startRotationIndex: 0
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: -1, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 3
+    gridPos: {x: -1, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: -1, y: 3}
+    startRotationIndex: 2
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 0, y: 1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 0, y: 2}
+    startRotationIndex: 1
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 1, y: 0}
+    startRotationIndex: 2
+    solvedRotationIndex: 1
+    straightVisualVariant: 0
+  - pipeType: 1
+    gridPos: {x: 1, y: 1}
+    startRotationIndex: 3
+    solvedRotationIndex: 2
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 1, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 2, y: -1}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 2, y: 0}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 2, y: 2}
+    startRotationIndex: 0
+    solvedRotationIndex: 0
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 3, y: -1}
+    startRotationIndex: 3
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 2
+    gridPos: {x: 3, y: 0}
+    startRotationIndex: 3
+    solvedRotationIndex: 3
+    straightVisualVariant: 0
+  - pipeType: 0
+    gridPos: {x: 3, y: 1}
+    startRotationIndex: 1
+    solvedRotationIndex: 1
+    straightVisualVariant: 1
+  - pipeType: 1
+    gridPos: {x: 3, y: 2}
+    startRotationIndex: 1
+    solvedRotationIndex: 2
+    straightVisualVariant: 0

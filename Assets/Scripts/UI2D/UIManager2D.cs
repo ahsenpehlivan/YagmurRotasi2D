@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using YagmurRotasi2D.Gameplay2D;
@@ -38,10 +40,22 @@ namespace YagmurRotasi2D.UI2D
         [Tooltip("The in-game pause menu (SafeAreaRoot/InGameMenuHost/DedicatedInGameMenu), opened by the top menuButton.")]
         [SerializeField] private InGameMenuView2D inGameMenu;
 
+        [Tooltip("Phase 9B: top-bar 'Tam Ekran' button - only ever toggled from this explicit click, never automatically.")]
+        [SerializeField] private Button fullscreenButton;
+        [SerializeField] private WebFullscreenController2D fullscreenController;
+
         private const string ReadyMessage = "Hazır";
         private const string SuccessMessage = "Su hedefe ulaştı!";
         private const string FailMessage = "Bağlantı eksik!";
-        private const string MainMenuSceneName = "MainMenuScene2D";
+
+        /// <summary>Phase 9B: shown instead of FailMessage specifically when the layout IS a fully connected, leak-free route but does not match the level's intended solution - distinguishes "nothing is connected yet" from "connected, but not the right way" without exposing the underlying mask/coordinate diagnostics (those stay in the Debug.Log below, Editor/Console only).</summary>
+        private const string OrientationMismatchMessage = "Bazı borular doğru yönde değil.";
+
+        // Phase 9A: normal gameplay Back (the in-game pause menu's former "Ana
+        // Menüye Dön" button, now relabeled "Bölüm Seçimine Dön") and the
+        // success panel's new second button both return to LevelSelectScene2D,
+        // not MainMenuScene2D - see HandleReturnToLevelSelectRequested below.
+        private const string LevelSelectSceneName = "LevelSelectScene2D";
 
         private void Awake()
         {
@@ -64,7 +78,97 @@ namespace YagmurRotasi2D.UI2D
                 menuButton.onClick.AddListener(HandleMenuButtonPressed);
             }
 
+            if (fullscreenButton != null && fullscreenController != null)
+            {
+                fullscreenButton.onClick.AddListener(fullscreenController.ToggleFullscreen);
+            }
+
             HideInfoPanel();
+        }
+
+        private void Update()
+        {
+            HandleKeyboardShortcuts();
+        }
+
+        /// <summary>
+        /// Phase 9B web keyboard shortcuts: Escape opens/closes the pause menu,
+        /// R resets the current level, Enter/Space starts the water - each
+        /// gated by IsGameplayInputAvailable so a shortcut can never fire
+        /// during water-flow animation, while the pause menu or success panel
+        /// is open, or while a text-input UI element has focus (this project
+        /// has no InputField anywhere today, but the guard is here regardless
+        /// per spec - defensive, not currently load-bearing).
+        /// </summary>
+        private void HandleKeyboardShortcuts()
+        {
+            if (Keyboard.current == null)
+                return;
+
+            GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            if (selected != null && selected.GetComponent<InputField>() != null)
+                return;
+
+            if (Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                HandleEscapePressed();
+            }
+
+            if (Keyboard.current.rKey.wasPressedThisFrame)
+            {
+                HandleResetShortcut();
+            }
+
+            if (Keyboard.current.enterKey.wasPressedThisFrame
+                || Keyboard.current.numpadEnterKey.wasPressedThisFrame
+                || Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                HandleStartWaterShortcut();
+            }
+        }
+
+        private void HandleEscapePressed()
+        {
+            if (inGameMenu == null)
+                return;
+
+            if (inGameMenu.IsVisible)
+            {
+                HandleContinueRequested();
+            }
+            else if (CanOpenInGameMenu())
+            {
+                LockGameplayForMenu();
+                inGameMenu.Show(HandleContinueRequested, HandleRestartRequested, HandleReturnToLevelSelectRequested);
+            }
+        }
+
+        /// <summary>Shared gate for both keyboard shortcuts (R/Enter/Space) - true only during normal, uninterrupted gameplay (not during water-flow animation, not while the pause menu or success panel is open).</summary>
+        private bool IsGameplayInputAvailable()
+        {
+            if (GameState2D.IsInputLocked) return false;
+            if (inGameMenu != null && inGameMenu.IsVisible) return false;
+            if (dedicatedSuccessPanel != null && dedicatedSuccessPanel.IsVisible) return false;
+            return true;
+        }
+
+        private void HandleResetShortcut()
+        {
+            if (!IsGameplayInputAvailable())
+                return;
+
+            levelManager.ReloadCurrentLevel();
+        }
+
+        private void HandleStartWaterShortcut()
+        {
+            if (!IsGameplayInputAvailable())
+                return;
+
+            if (startWaterButton != null && !startWaterButton.interactable)
+                return;
+
+            OnStartWaterPressed();
         }
 
         private void HandleMenuButtonPressed()
@@ -74,7 +178,7 @@ namespace YagmurRotasi2D.UI2D
 
             LockGameplayForMenu();
 
-            inGameMenu.Show(HandleContinueRequested, HandleRestartRequested, HandleMainMenuRequested);
+            inGameMenu.Show(HandleContinueRequested, HandleRestartRequested, HandleReturnToLevelSelectRequested);
         }
 
         /// <summary>Guards against opening the menu during pipe-fill/success FX (GameState2D.IsInputLocked stays true for that whole sequence) or while DedicatedSuccessPanel is visible (which only becomes true after input unlocks again, so it needs its own explicit check) or if the menu is already open.</summary>
@@ -122,11 +226,11 @@ namespace YagmurRotasi2D.UI2D
             levelManager.ReloadCurrentLevel();
         }
 
-        /// <summary>Ana Menüye Dön: progress is already saved incrementally elsewhere (GameProgress2D.SetCurrentLevel/MarkLevelCompleted at their own trigger points) - nothing is reset here. Loads MainMenuScene2D non-additively; DedicatedInGameMenu lives inside GameScene2D (not DontDestroyOnLoad) so it's simply destroyed with the rest of the scene, never duplicated.</summary>
-        private void HandleMainMenuRequested()
+        /// <summary>Bölüm Seçimine Dön: progress is already saved incrementally elsewhere (GameProgress2D.SetCurrentLevel/MarkLevelCompleted at their own trigger points) - nothing is reset here. Loads LevelSelectScene2D non-additively (Phase 9A - normal gameplay Back no longer returns all the way to MainMenuScene2D); DedicatedInGameMenu/DedicatedSuccessPanel live inside GameScene2D (not DontDestroyOnLoad) so they're simply destroyed with the rest of the scene, never duplicated. Shared by both the in-game pause menu and the success panel's "Bölüm Seçimine Dön" button - one implementation, like HandleNextLevelRequested below.</summary>
+        private void HandleReturnToLevelSelectRequested()
         {
             inGameMenu.Hide();
-            SceneManager.LoadScene(MainMenuSceneName);
+            SceneManager.LoadScene(LevelSelectSceneName);
         }
 
         /// <summary>The single implementation of "advance to the next level" - used by both the legacy InfoNextLevelButton and dedicatedSuccessPanel's Next Level button.</summary>
@@ -155,6 +259,20 @@ namespace YagmurRotasi2D.UI2D
             }
         }
 
+        /// <summary>
+        /// The complete campaign runtime success rule (Phase 8 Fast-Track QA):
+        /// FlowSolver2D.Solve() alone only proves the CURRENT rotation state is
+        /// a connected, leak-free Source-to-Target route - it has no notion of
+        /// "every placed pipe must belong to that route" or "this must be the
+        /// level's INTENDED solution", so success additionally requires every
+        /// placed pipe to be reached (a disconnected filler/branch pipe left
+        /// out of the route is not success) and every pipe's current logical
+        /// orientation to match the level asset's stored solved orientation
+        /// (LevelManager2D.ValidateCurrentMatchesSolved - logical port masks,
+        /// not raw rotationIndex). Deliberately does not touch FlowSolver2D
+        /// itself - this campaign-specific rule is layered on top of its
+        /// result here instead.
+        /// </summary>
         private void OnStartWaterPressed()
         {
             if (GameState2D.IsInputLocked)
@@ -168,7 +286,23 @@ namespace YagmurRotasi2D.UI2D
                 levelManager.TargetCell,
                 levelManager.TargetInputDirection);
 
-            if (result.IsSuccess)
+            bool allPipesReachable = result.ReachableTiles.Count == levelManager.ActivePipes.Count;
+            bool connectivityOk = result.TargetReached && !result.HasLeak && allPipesReachable;
+            bool orientationOk = levelManager.ValidateCurrentMatchesSolved(out int mismatchCount, out Vector2Int firstMismatchCell, out int currentMask, out int expectedMask);
+            bool success = connectivityOk && orientationOk;
+
+            if (!success)
+            {
+                // Editor/Console-only diagnostics (raw masks/coordinates never
+                // reach the player - see the child-friendly resultText below).
+                Debug.Log($"CampaignLevelValidation: Level {levelManager.CurrentLevelIndex + 1} did not pass the full success check - " +
+                    $"TargetReached={result.TargetReached}, HasLeak={result.HasLeak}, " +
+                    $"Reachable={result.ReachableTiles.Count}/{levelManager.ActivePipes.Count}, " +
+                    $"OrientationMismatches={mismatchCount}, FirstMismatchCell={firstMismatchCell}, " +
+                    $"CurrentMask={currentMask}, ExpectedMask={expectedMask}.");
+            }
+
+            if (success)
             {
                 // Score is still calculated (StarCount depends on it) but is never
                 // shown to the player - only the resulting star count is displayed.
@@ -183,7 +317,10 @@ namespace YagmurRotasi2D.UI2D
             else
             {
                 scoreManager.RegisterWrongAttempt();
-                resultText.text = FailMessage;
+                // Distinguishes "nothing is connected yet" from "connected, but
+                // not the level's intended solution" - both are visible,
+                // child-friendly UI feedback, never just a Console log.
+                resultText.text = connectivityOk && !orientationOk ? OrientationMismatchMessage : FailMessage;
             }
         }
 
@@ -204,11 +341,21 @@ namespace YagmurRotasi2D.UI2D
 
             if (dedicatedSuccessPanel != null)
             {
+                // Phase 9A: Level 100 (the last entry in the campaign catalog's
+                // own ordering, never a hardcoded count) has no next level -
+                // SuccessPanelView2D hides NextLevelButton entirely when false.
+                bool hasNextLevel = levelManager.CurrentLevelIndex + 1 < levelManager.LevelCount;
+
                 dedicatedSuccessPanel.Show(
                     scoreManager.StarCount,
                     "Tebrikler!",
                     levelManager.CurrentInfoText,
-                    HandleNextLevelRequested);
+                    scoreManager.CurrentScore,
+                    scoreManager.MoveCount,
+                    hasNextLevel,
+                    HandleNextLevelRequested,
+                    HandleRestartRequested,
+                    HandleReturnToLevelSelectRequested);
             }
         }
 

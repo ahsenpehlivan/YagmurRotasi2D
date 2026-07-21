@@ -68,10 +68,16 @@ namespace YagmurRotasi2D.Gameplay2D
             // dimensions can differ between levels as of Phase 8A) instead of
             // once here.
 
-            // Resumes the saved level from MainMenuScene2D's "Oyuna Başla" (defaults
-            // safely to level 1 if no progress exists yet); clamped again here in
-            // case the saved value is ever out of range for this scene's level list.
-            int startIndex = Mathf.Clamp(GameProgress2D.CurrentLevel - 1, 0, levels.Count - 1);
+            // Phase 9A: a level explicitly picked in LevelSelectScene2D takes
+            // priority (CampaignSession2D is in-memory-only navigation intent,
+            // never persisted - see its own doc comment) - falls back to the
+            // saved GameProgress2D.CurrentLevel (defaults safely to level 1 if
+            // no progress exists yet) for any other entry path into this scene.
+            // Clamped again here in case either value is ever out of range for
+            // this scene's level list.
+            int startIndex = CampaignSession2D.HasSelectedLevel
+                ? Mathf.Clamp(CampaignSession2D.SelectedLevelNumber - 1, 0, levels.Count - 1)
+                : Mathf.Clamp(GameProgress2D.CurrentLevel - 1, 0, levels.Count - 1);
             LoadLevel(startIndex);
         }
 
@@ -109,11 +115,20 @@ namespace YagmurRotasi2D.Gameplay2D
             TargetCell = data.targetPos;
             TargetInputDirection = data.targetInputDirection;
 
+            // Scale relative to each prefab's OWN authored localScale, not
+            // Vector3.one - BoardManager2D.CellSize is normalized so a 5x5
+            // board (the original fixed board) always yields CellSize=1, so
+            // multiplying the prefab's authored scale by CellSize reproduces
+            // that exact pre-Phase-8A size at 5x5 and shrinks proportionally
+            // for 6x6-10x10. The previous `Vector3.one * CellSize` discarded
+            // the prefab's authored scale entirely (Source's 0.1, Target's
+            // 0.2), which is why both markers rendered far too large once
+            // variable grid sizes were introduced.
             Transform stParent = sourceTargetContainer != null ? sourceTargetContainer : transform;
             currentSourceInstance = Instantiate(sourcePrefab, boardManager.GridToWorld(SourceCell), Quaternion.identity, stParent);
-            currentSourceInstance.transform.localScale = Vector3.one * boardManager.CellSize;
+            currentSourceInstance.transform.localScale = sourcePrefab.transform.localScale * boardManager.CellSize;
             currentTargetInstance = Instantiate(targetPrefab, boardManager.GridToWorld(TargetCell), Quaternion.identity, stParent);
-            currentTargetInstance.transform.localScale = Vector3.one * boardManager.CellSize;
+            currentTargetInstance.transform.localScale = targetPrefab.transform.localScale * boardManager.CellSize;
             currentTargetFX = currentTargetInstance.GetComponent<TargetFX2D>();
 
             foreach (PipeSpawnData2D spawn in data.pipes)
@@ -122,6 +137,68 @@ namespace YagmurRotasi2D.Gameplay2D
             }
 
             OnLevelLoaded?.Invoke();
+        }
+
+        /// <summary>
+        /// Phase 8 Fast-Track QA: campaign-specific solved-orientation check,
+        /// separate from FlowSolver2D's connectivity/leak check. Compares every
+        /// active pipe's CURRENT logical port mask (its current rotationIndex)
+        /// against the level asset's STORED solved port mask (solvedRotationIndex)
+        /// via PipeTile2D.GetPortMask - logical open-direction sets, not raw
+        /// rotationIndex, so Straight's two-fold symmetry (0≈2, 1≈3) and Cross's
+        /// single logical orientation are handled for free by the port-mask
+        /// tables themselves (see PipeTile2D.GetPortMask's own doc comment) with
+        /// no special-casing needed here.
+        ///
+        /// This exists because FlowSolver2D.Solve() only proves the CURRENT
+        /// rotation state forms a connected, leak-free Source-to-Target route -
+        /// it has no notion of "the intended solved layout" at all, so a
+        /// different-but-still-valid rotation combination (most easily reached
+        /// via Straight's symmetry, or an alternate routing through a
+        /// branching/cyclic network) can satisfy it without matching the
+        /// level's designed solution.
+        /// </summary>
+        public bool ValidateCurrentMatchesSolved(out int mismatchCount, out Vector2Int firstMismatchCell, out int firstMismatchCurrentMask, out int firstMismatchExpectedMask)
+        {
+            mismatchCount = 0;
+            firstMismatchCell = Vector2Int.zero;
+            firstMismatchCurrentMask = 0;
+            firstMismatchExpectedMask = 0;
+
+            var solvedByCell = new Dictionary<Vector2Int, PipeSpawnData2D>();
+            foreach (PipeSpawnData2D spawn in levels[currentLevelIndex].pipes)
+            {
+                solvedByCell[spawn.gridPos] = spawn;
+            }
+
+            bool firstMismatchRecorded = false;
+            foreach (PipeTile2D pipe in activePipes)
+            {
+                if (!solvedByCell.TryGetValue(pipe.GridPosition, out PipeSpawnData2D spawn))
+                {
+                    // Defensive only - every active pipe was spawned FROM this
+                    // exact level's pipe list, so its coordinate always has a
+                    // matching entry.
+                    continue;
+                }
+
+                int currentMask = pipe.GetCanonicalPortMask();
+                int expectedMask = PipeTile2D.GetPortMask(spawn.pipeType, spawn.solvedRotationIndex);
+
+                if (currentMask != expectedMask)
+                {
+                    mismatchCount++;
+                    if (!firstMismatchRecorded)
+                    {
+                        firstMismatchRecorded = true;
+                        firstMismatchCell = pipe.GridPosition;
+                        firstMismatchCurrentMask = currentMask;
+                        firstMismatchExpectedMask = expectedMask;
+                    }
+                }
+            }
+
+            return mismatchCount == 0;
         }
 
         private void ClearLevelObjects()

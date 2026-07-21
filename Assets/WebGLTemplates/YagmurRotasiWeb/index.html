@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes">
+    <meta name="description" content="Yağmur Rotası - yağmur suyu hasadı ve şehir suyu yönetimini öğreten eğitici bulmaca oyunu.">
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+    {{{ SERVICE_WORKER_HEADER_TAGS }}}
+</head>
+<body>
+    <div id="unity-container">
+        <canvas id="unity-canvas" tabindex="-1" aria-label="Yağmur Rotası oyun ekranı"></canvas>
+
+        <div id="unity-loading-bar" role="status" aria-live="polite">
+            <div id="unity-loading-title">Yağmur Rotası</div>
+            <div id="unity-progress-bar-empty">
+                <div id="unity-progress-bar-full"></div>
+            </div>
+            <div id="unity-loading-text">Yükleniyor…</div>
+        </div>
+
+        <div id="unity-warning" role="alert"></div>
+
+        <noscript>
+            <div id="unity-no-js">Bu oyunu oynamak için tarayıcınızda JavaScript etkin olmalıdır.</div>
+        </noscript>
+        <div id="unity-fallback" style="display:none;">
+            Oyun bu tarayıcıda başlatılamadı. Güncel bir Chrome, Firefox veya Edge tarayıcısıyla tekrar deneyin.
+        </div>
+    </div>
+
+    <script>
+        var container = document.querySelector("#unity-container");
+        var canvas = document.querySelector("#unity-canvas");
+        var loadingBar = document.querySelector("#unity-loading-bar");
+        var progressBarFull = document.querySelector("#unity-progress-bar-full");
+        var loadingText = document.querySelector("#unity-loading-text");
+        var warningBanner = document.querySelector("#unity-warning");
+        var fallback = document.querySelector("#unity-fallback");
+
+        function unityShowBanner(msg, type) {
+            function updateBannerVisibility() {
+                warningBanner.style.display = warningBanner.children.length ? "block" : "none";
+            }
+            var div = document.createElement("div");
+            div.className = "unity-banner-" + (type || "info");
+            div.innerHTML = msg;
+            warningBanner.appendChild(div);
+            if (type !== "error") {
+                setTimeout(function () {
+                    if (div.parentNode) warningBanner.removeChild(div);
+                    updateBannerVisibility();
+                }, 6000);
+            }
+            updateBannerVisibility();
+        }
+
+        // Canvas always fills whatever the browser viewport currently is -
+        // no fixed wrapper, resize just updates CSS size; Unity's own loader
+        // re-syncs the internal render target to the canvas's actual
+        // client size every frame, so no manual backbuffer resize is needed.
+        function resizeCanvasToViewport() {
+            canvas.style.width = window.innerWidth + "px";
+            canvas.style.height = window.innerHeight + "px";
+        }
+        window.addEventListener("resize", resizeCanvasToViewport);
+        resizeCanvasToViewport();
+
+        var buildUrl = "Build";
+        var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+        var config = {
+            dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+            frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+            codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "{{{ COMPANY_NAME }}}",
+            productName: "{{{ PRODUCT_NAME }}}",
+            productVersion: "{{{ PRODUCT_VERSION }}}",
+            showBanner: unityShowBanner,
+        };
+
+        loadingBar.style.display = "flex";
+
+        var script = document.createElement("script");
+        script.src = loaderUrl;
+        script.onerror = function () {
+            loadingBar.style.display = "none";
+            fallback.style.display = "block";
+        };
+        script.onload = function () {
+            createUnityInstance(canvas, config, function (progress) {
+                progressBarFull.style.width = Math.round(100 * progress) + "%";
+                loadingText.textContent = "Yükleniyor… " + Math.round(100 * progress) + "%";
+            }).then(function (unityInstance) {
+                loadingBar.style.display = "none";
+                window.unityInstance = unityInstance;
+            }).catch(function (message) {
+                loadingBar.style.display = "none";
+                fallback.style.display = "block";
+                console.error(message);
+            });
+        };
+        document.body.appendChild(script);
+    </script>
+</body>
+</html>

@@ -19,8 +19,12 @@ namespace YagmurRotasi2D.Gameplay2D
         [Tooltip("Drives the WaterOverlay fill animation (real sprite-sheet frames if bound, otherwise a safe placeholder fallback).")]
         [SerializeField] private PipeWaterVisual2D waterVisual;
 
+        [Tooltip("Phase 9B: subtle hover tint for mouse-first web interaction - applied only by PipeHoverCoordinator2D (one raycast per frame, not per pipe), never permanently changes the base sprite color.")]
+        [SerializeField] private Color hoverTintColor = new Color(1f, 0.97f, 0.75f, 1f);
+
         private Collider2D pipeCollider;
         private Color defaultColor;
+        private bool isHovered;
 
         public PipeType2D PipeType => pipeType;
         public int RotationIndex => rotationIndex;
@@ -165,11 +169,80 @@ namespace YagmurRotasi2D.Gameplay2D
             return false;
         }
 
+        /// <summary>
+        /// Logical open-port bitmask (one bit per Direction2D value, 1 &lt;&lt;
+        /// (int)direction) for an arbitrary (type, rotationIndex) pair - static
+        /// so a stored solvedRotationIndex can be compared without needing a
+        /// live PipeTile2D at that rotation (Phase 8 Fast-Track QA: campaign
+        /// runtime success must compare CURRENT vs SOLVED canonical orientation,
+        /// not raw rotationIndex). This is already correctly rotation-symmetric
+        /// with zero extra special-casing: StraightDirections[0] and [2] above
+        /// are literally the same direction set (so their masks are equal, and
+        /// so are [1]/[3]), and CrossDirections never varies by rotationIndex
+        /// (so Cross always yields the same single mask regardless of rotation).
+        /// </summary>
+        public static int GetPortMask(PipeType2D type, int rotationIndex)
+        {
+            int normalizedRotation = ((rotationIndex % 4) + 4) % 4;
+            Direction2D[] openings;
+            switch (type)
+            {
+                case PipeType2D.Corner:
+                    openings = CornerDirections[normalizedRotation];
+                    break;
+                case PipeType2D.Tee:
+                    openings = TeeDirections[normalizedRotation];
+                    break;
+                case PipeType2D.Cross:
+                    openings = CrossDirections;
+                    break;
+                case PipeType2D.Straight:
+                default:
+                    openings = StraightDirections[normalizedRotation];
+                    break;
+            }
+
+            int mask = 0;
+            foreach (Direction2D dir in openings)
+            {
+                mask |= 1 << (int)dir;
+            }
+            return mask;
+        }
+
+        /// <summary>This pipe's current logical port mask - GetPortMask(pipeType, rotationIndex) for whatever the player has currently rotated it to.</summary>
+        public int GetCanonicalPortMask() => GetPortMask(pipeType, rotationIndex);
+
         public void SetHighlight(bool isHighlighted)
         {
             if (baseVisualRenderer != null)
             {
                 baseVisualRenderer.color = isHighlighted ? Color.blue : defaultColor;
+            }
+        }
+
+        /// <summary>
+        /// Phase 9B mouse-hover feedback - called exclusively by
+        /// PipeHoverCoordinator2D, which does exactly ONE Physics2D.Raycast
+        /// per frame for the whole board (not one per pipe) and tells only the
+        /// single previously/currently-hovered pipe to update, so this never
+        /// costs more than a single color assignment even on a 10x10 board.
+        /// Never fights with SetHighlight's water-flow blue - the coordinator
+        /// itself stops calling this while GameState2D.IsInputLocked is true
+        /// (the same window water-flow animation owns), so hover is always
+        /// cleared before a flow highlight applies and only resumes after
+        /// ResetWaterFlowVisual has already restored defaultColor.
+        /// </summary>
+        public void SetHovered(bool hovered)
+        {
+            if (isHovered == hovered)
+                return;
+
+            isHovered = hovered;
+
+            if (baseVisualRenderer != null)
+            {
+                baseVisualRenderer.color = isHovered ? hoverTintColor : defaultColor;
             }
         }
 
