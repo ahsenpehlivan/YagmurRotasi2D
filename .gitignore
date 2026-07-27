@@ -37,8 +37,11 @@ ExportedObj/
 *.csproj
 *.unityproj
 *.sln
+*.slnx
 *.suo
 *.tmp
+*.bak
+*.orig
 *.user
 *.userprefs
 *.pidb
