@@ -1,4 +1,7 @@
 using UnityEngine;
+#if UNITY_WEBGL && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 
 namespace YagmurRotasi2D.Gameplay2D
 {
@@ -77,6 +80,17 @@ namespace YagmurRotasi2D.Gameplay2D
         public static void Save()
         {
             PlayerPrefs.Save();
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // PlayerPrefs.Save() alone only queues the flush on WebGL - see
+            // GameProgressSync2D.jslib for why the explicit FS.syncfs bridge
+            // call is genuinely required here.
+            SyncGameProgressToIndexedDB();
+#endif
         }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        private static extern void SyncGameProgressToIndexedDB();
+#endif
     }
 }

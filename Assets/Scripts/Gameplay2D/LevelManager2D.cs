@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using UnityEngine;
+using YagmurRotasi2D.Audio2D;
 using YagmurRotasi2D.Campaign2D;
 using YagmurRotasi2D.Core2D;
 using YagmurRotasi2D.Data2D;
@@ -34,6 +35,17 @@ namespace YagmurRotasi2D.Gameplay2D
         private GameObject currentSourceInstance;
         private GameObject currentTargetInstance;
         private TargetFX2D currentTargetFX;
+
+        // Phase 9L: CloudAndRain/SuccessFXZone are no longer reachable from
+        // BoardRoot at all - GameSceneWebLayoutBuilder2D now moves them to a
+        // separate scene-level "IndependentWorldFXRoot" specifically so they
+        // are never a descendant of BoardFitContainer/BoardRoot and can never
+        // inherit GameplayBoardFitter2D's runtime scale/position changes.
+        // That structural fix makes runtime enforcement of their transforms
+        // unnecessary - the saved Edit Mode transforms are authoritative on
+        // their own now, so this script no longer caches or writes to either
+        // of them (the former ApplyAuthoredWeatherTransform/cloudAndRainCache
+        // were removed entirely, not just repointed).
 
         private readonly List<PipeTile2D> activePipes = new List<PipeTile2D>();
 
@@ -100,7 +112,13 @@ namespace YagmurRotasi2D.Gameplay2D
             LevelData2D data = levels[currentLevelIndex];
 
             ClearLevelObjects();
-            scoreManager.ResetState();
+
+            // Per-level fair star thresholds (never one fixed global
+            // threshold) - optimalMoves is recomputed fresh from THIS
+            // level's own pipe data every load/reload, so a Reload never
+            // reuses a stale value from a previous level.
+            int optimalMoves = ScoreManager2D.CalculateOptimalMoves(data.pipes);
+            scoreManager.ResetState(optimalMoves, data.useManualStarLimits, data.manualThreeStarMoveLimit, data.manualTwoStarMoveLimit);
 
             // Grid dimensions can differ between levels as of Phase 8A - resize
             // (reallocates the pipe grid and recomputes cellSize so the new
@@ -136,8 +154,134 @@ namespace YagmurRotasi2D.Gameplay2D
                 SpawnPipe(spawn);
             }
 
+            EnsureBoardTransformCorrections();
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (currentLevelIndex == 0)
+            {
+                LogVisualScaleValidation();
+            }
+#endif
+
             OnLevelLoaded?.Invoke();
         }
+
+        // Manually verified in the Unity Editor (Phase 9H) - authoritative,
+        // not derived from any formula. Applied as ABSOLUTE assignments only
+        // (never *=), so repeated level loads or builder reruns always
+        // converge on exactly these numbers - never 0.49/0.343 compounding.
+        // BoardContainerVisualScale is built from BoardManager2D.
+        // VisualPackingScale (not a separate 0.7f literal) so the container
+        // scale and GridToWorld's spacing (Phase 9I fix) can never drift
+        // apart from each other again.
+        private static readonly Vector3 BoardRootLocalPosition = new Vector3(-0.270000011f, -0.0799999982f, 0f);
+        private static readonly Vector3 BoardContainerVisualScale = new Vector3(BoardManager2D.VisualPackingScale, BoardManager2D.VisualPackingScale, 1f);
+
+        /// <summary>
+        /// Reasserts BoardRoot's local offset (under BoardFitContainer) and
+        /// GridCells/Pipes/SourceTarget's own container scale on every level
+        /// load - defensive: BuildGrid()/SpawnPipe()/the Source&amp;Target
+        /// Instantiate calls above only ever touch their SPAWNED INSTANCES'
+        /// own transforms, never these containers' own transform, so this is
+        /// currently a no-op after the builder has set them once. Kept as a
+        /// safety net per spec rather than relying on that never changing.
+        /// Derives BoardRoot from pipesContainer.parent and GridCells from
+        /// BoardRoot.Find("GridCells") - no new serialized field needed.
+        /// Never touches CloudAndRain/SuccessFXZone or anything under them -
+        /// this method has no reference to either, by construction.
+        /// </summary>
+        private void EnsureBoardTransformCorrections()
+        {
+            if (pipesContainer == null || sourceTargetContainer == null)
+                return;
+
+            Transform boardRoot = pipesContainer.parent;
+            if (boardRoot != null)
+            {
+                boardRoot.localPosition = BoardRootLocalPosition;
+
+                Transform gridCells = boardRoot.Find("GridCells");
+                if (gridCells != null)
+                {
+                    gridCells.localScale = BoardContainerVisualScale;
+                }
+            }
+
+            pipesContainer.localScale = BoardContainerVisualScale;
+            sourceTargetContainer.localScale = BoardContainerVisualScale;
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>Part D validation log (Level 1 only, Editor/Development Build only): reports the numbers the Phase 9E visual-scale fix and the Phase 9H manual transform correction are supposed to guarantee, so a regression is visible in the Console instead of only being caught by eye.</summary>
+        private void LogVisualScaleValidation()
+        {
+            // Compares WORLD-space renderer bounds against a WORLD-space cell
+            // size rather than the raw local CellSize - BoardFitContainer's
+            // own screen-fit scale multiplies both the renderers and the
+            // board uniformly, so dividing world bounds by a still-local
+            // cell size would silently report the wrong ratio whenever the
+            // board isn't at fitScale=1 (i.e. almost always). This cancels
+            // that outer scale out and reports the TRUE authoring-time
+            // visual-to-cell ratio (~PipeVisualRatio for pipes). Also
+            // includes VisualPackingScale (Phase 9I) - the ACTUAL spacing
+            // GridToWorld now places cells at, matching GridCells/Pipes/
+            // SourceTarget's own container scale, not the raw un-shrunk
+            // CellSize.
+            float worldCellSize = boardManager.CellSize * BoardManager2D.VisualPackingScale * boardManager.transform.lossyScale.x;
+            PipeTile2D firstPipe = activePipes.Count > 0 ? activePipes[0] : null;
+            SpriteRenderer pipeRenderer = firstPipe != null ? firstPipe.GetComponentInChildren<SpriteRenderer>() : null;
+            SpriteRenderer sourceRenderer = currentSourceInstance != null ? currentSourceInstance.GetComponentInChildren<SpriteRenderer>() : null;
+            SpriteRenderer targetRenderer = currentTargetInstance != null ? currentTargetInstance.GetComponentInChildren<SpriteRenderer>() : null;
+
+            string pipeSize = pipeRenderer != null ? $"{pipeRenderer.bounds.size.x:0.000}x{pipeRenderer.bounds.size.y:0.000}" : "n/a";
+            string sourceSize = sourceRenderer != null ? $"{sourceRenderer.bounds.size.x:0.000}x{sourceRenderer.bounds.size.y:0.000}" : "n/a";
+            string targetSize = targetRenderer != null ? $"{targetRenderer.bounds.size.x:0.000}x{targetRenderer.bounds.size.y:0.000}" : "n/a";
+            float pipeRatio = pipeRenderer != null && worldCellSize > 0f ? Mathf.Max(pipeRenderer.bounds.size.x, pipeRenderer.bounds.size.y) / worldCellSize : 0f;
+
+            Debug.Log($"LevelManager2D visual-scale validation (Level 1): cellWorldSize={worldCellSize:0.000}, " +
+                $"pipeRenderer={pipeSize} (ratio={pipeRatio:0.00}), sourceRenderer={sourceSize}, targetRenderer={targetSize}.");
+
+            Transform boardRoot = pipesContainer != null ? pipesContainer.parent : null;
+            Transform gridCells = boardRoot != null ? boardRoot.Find("GridCells") : null;
+            string boardRootPos = boardRoot != null ? $"({boardRoot.localPosition.x:0.000000000},{boardRoot.localPosition.y:0.000000000},{boardRoot.localPosition.z:0.000000000})" : "n/a";
+            string gridCellsScale = gridCells != null ? $"({gridCells.localScale.x:0.0},{gridCells.localScale.y:0.0},{gridCells.localScale.z:0.0})" : "n/a";
+            string pipesScale = pipesContainer != null ? $"({pipesContainer.localScale.x:0.0},{pipesContainer.localScale.y:0.0},{pipesContainer.localScale.z:0.0})" : "n/a";
+            string sourceTargetScale = sourceTargetContainer != null ? $"({sourceTargetContainer.localScale.x:0.0},{sourceTargetContainer.localScale.y:0.0},{sourceTargetContainer.localScale.z:0.0})" : "n/a";
+
+            Debug.Log($"LevelManager2D manual transform validation (Level 1): BoardRoot.localPosition={boardRootPos}, " +
+                $"GridCells.localScale={gridCellsScale}, Pipes.localScale={pipesScale}, SourceTarget.localScale={sourceTargetScale}. " +
+                $"Expected: BoardRoot=(-0.270000011,-0.079999998,0), GridCells/Pipes/SourceTarget=({BoardManager2D.VisualPackingScale:0.0},{BoardManager2D.VisualPackingScale:0.0},1) [derives from BoardManager2D.VisualPackingScale].");
+
+            // Read-only, scene-wide lookup purely for this diagnostic line -
+            // never cached, never written to. Phase 9L: SuccessFXZone/
+            // CloudAndRain are no longer descendants of BoardRoot at all (see
+            // GameSceneWebLayoutBuilder2D.EnsureIndependentWorldFXRoot) - they
+            // now live under a separate scene-level "IndependentWorldFXRoot",
+            // specifically so nothing in the BoardRoot/BoardFitContainer
+            // hierarchy (including GameplayBoardFitter2D) can ever affect
+            // them again. This script does not enforce any of their
+            // transforms anymore; they are reported here only so a
+            // regression in the SAVED SCENE is still visible in the Console.
+            GameObject independentWorldFXRootGO = GameObject.Find("IndependentWorldFXRoot");
+            Transform successFXZoneReadOnly = independentWorldFXRootGO != null ? independentWorldFXRootGO.transform.Find("SuccessFXZone") : null;
+            Transform duckFXRootReadOnly = successFXZoneReadOnly != null ? successFXZoneReadOnly.Find("DuckFXRoot") : null;
+            Transform flowerFXRootReadOnly = successFXZoneReadOnly != null ? successFXZoneReadOnly.Find("FlowerFXRoot") : null;
+            Transform cloudAndRainReadOnly = independentWorldFXRootGO != null ? independentWorldFXRootGO.transform.Find("CloudAndRain") : null;
+
+            Debug.Log($"LevelManager2D effect transform validation (Level 1, read-only): DuckFXRoot={DescribeTransform(duckFXRootReadOnly)}, " +
+                $"FlowerFXRoot={DescribeTransform(flowerFXRootReadOnly)}, CloudAndRain={DescribeTransform(cloudAndRainReadOnly)}. " +
+                "None of these three are written by this script (Phase 9L) - the currently-saved GameScene2D Edit Mode transforms, " +
+                "under IndependentWorldFXRoot, are authoritative and structurally protected from GameplayBoardFitter2D/BoardRoot changes.");
+        }
+
+        private static string DescribeTransform(Transform t)
+        {
+            if (t == null) return "n/a";
+            return $"pos=({t.localPosition.x:0.000000000},{t.localPosition.y:0.000000000},{t.localPosition.z:0.000000000}) " +
+                $"scale=({t.localScale.x:0.000000000},{t.localScale.y:0.000000000},{t.localScale.z:0.000000000}) " +
+                $"rot=({t.localRotation.x:0.000},{t.localRotation.y:0.000},{t.localRotation.z:0.000},{t.localRotation.w:0.000})";
+        }
+#endif
 
         /// <summary>
         /// Phase 8 Fast-Track QA: campaign-specific solved-orientation check,
@@ -234,19 +378,64 @@ namespace YagmurRotasi2D.Gameplay2D
             currentTargetFX = null;
         }
 
+        /// <summary>
+        /// Part B (Phase 9E visual-scale audit): every pipe sprite actually
+        /// spawned (GetPrefabFor only ever returns pipeStraightWidePrefab/
+        /// pipeStraightNarrowPrefab/pipeCornerPrefab/pipeTeePrefab/
+        /// pipeCrossPrefab - all five share the same pipes_tileset.png atlas,
+        /// 32x32px sub-sprites at spritePixelsToUnits=32) is authored to
+        /// render at EXACTLY 1.0 world unit on both axes at localScale 1 -
+        /// i.e. it already fills 100% of a cellSize=1 cell edge-to-edge with
+        /// zero margin. This is NOT a double-scale bug (BoardFitContainer's
+        /// screen-fit scale and this cellSize multiplication are two
+        /// different, correctly-separate concerns - the former fits the
+        /// WHOLE already-consistent board to the viewport, the latter keeps
+        /// each pipe's LOCAL size matched to the LOCAL grid spacing so it
+        /// still aligns after SetGridSize() changes cellSize for a
+        /// different grid width/height) - the sprite itself was simply
+        /// authored at 100% instead of leaving any margin.
+        /// </summary>
+        private const float PipeVisualRatio = 0.84f; // spec: pipe visual bounds 78-88% of one cell
+
         private void SpawnPipe(PipeSpawnData2D spawn)
         {
             GameObject prefab = GetPrefabFor(spawn);
             Transform parent = pipesContainer != null ? pipesContainer : transform;
 
             GameObject instance = Instantiate(prefab, boardManager.GridToWorld(spawn.gridPos), Quaternion.identity, parent);
-            instance.transform.localScale = Vector3.one * boardManager.CellSize;
+            ApplyPipeVisualScale(instance, boardManager.CellSize);
             PipeTile2D pipe = instance.GetComponent<PipeTile2D>();
             pipe.Initialize(spawn.pipeType, spawn.startRotationIndex, spawn.gridPos);
             pipe.OnPlayerRotated += HandlePipeRotatedByPlayer;
 
             boardManager.SetPipe(spawn.gridPos, pipe);
             activePipes.Add(pipe);
+        }
+
+        /// <summary>
+        /// Applies PipeVisualRatio on top of cellSize to the pipe's root
+        /// (never a "dedicated visual child" - none of the pipe prefabs have
+        /// one, the SpriteRenderer/BoxCollider2D/PipeTile2D all live on the
+        /// same root GameObject - see class doc), then immediately
+        /// compensates BoxCollider2D.size by the inverse ratio so the
+        /// WORLD-SPACE tap target is completely unchanged even though the
+        /// rendered sprite is now smaller. WaterOverlay (a child of the
+        /// pipe root) shrinks in lockstep automatically since child
+        /// transforms inherit parent scale - no separate handling needed for
+        /// "water overlays must match the resized pipe visuals".
+        /// Idempotent per spawn: instance is always a fresh Instantiate, so
+        /// collider.size always starts from the prefab's untouched authored
+        /// baseline - never divides an already-divided value.
+        /// </summary>
+        private static void ApplyPipeVisualScale(GameObject instance, float cellSize)
+        {
+            instance.transform.localScale = Vector3.one * cellSize * PipeVisualRatio;
+
+            BoxCollider2D pipeCollider = instance.GetComponent<BoxCollider2D>();
+            if (pipeCollider != null)
+            {
+                pipeCollider.size /= PipeVisualRatio;
+            }
         }
 
         /// <summary>straightVisualVariant only picks which visual prefab to spawn for Straight; ignored by every other type.</summary>
@@ -268,9 +457,23 @@ namespace YagmurRotasi2D.Gameplay2D
             }
         }
 
+        /// <summary>
+        /// The single centralized "a pipe rotation was actually accepted"
+        /// path - every spawned pipe's OnPlayerRotated is wired here (see
+        /// SpawnPipe above), and PipeTile2D.OnPlayerRotated itself only ever
+        /// fires from TryRotateByPlayer() after a real rotation happened
+        /// (never for Source/Target, which aren't PipeTile2D at all; never
+        /// during Initialize()/level setup; never while GameState2D.
+        /// IsInputLocked is true, since PipeTile2D.Update() already refuses
+        /// to even attempt a rotation then). Playing the pipe click sound
+        /// here - rather than inside PipeTile2D itself - keeps pipe rotation
+        /// logic completely unchanged; this is a pure addition alongside the
+        /// existing RegisterMove()/OnPlayerMoved call.
+        /// </summary>
         private void HandlePipeRotatedByPlayer()
         {
             scoreManager.RegisterMove();
+            GameAudioManager2D.Instance?.PlayPipeClick();
             OnPlayerMoved?.Invoke();
         }
 

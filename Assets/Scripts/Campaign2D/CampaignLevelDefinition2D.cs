@@ -59,6 +59,12 @@ namespace YagmurRotasi2D.Campaign2D
         [Header("Pipes")]
         public List<PipeSpawnData2D> pipes = new List<PipeSpawnData2D>();
 
+        [Header("Manual star-limit override (optional - default OFF, see ScoreManager2D.ResolveStarLimits)")]
+        [Tooltip("Deliberately NOT copied by CampaignAssetIO2D.CopyInto - a human-authored tuning decision on this saved asset, independent of and never overwritten by regeneration from a stored seed.")]
+        public bool useManualStarLimits;
+        public int manualThreeStarMoveLimit;
+        public int manualTwoStarMoveLimit;
+
         public GridBounds2D Bounds => new GridBounds2D(gridWidth, gridHeight);
 
         /// <summary>Converts to the exact same LevelData2D LevelManager2D already loads from BuildLevels() - no second runtime representation.</summary>
@@ -76,7 +82,10 @@ namespace YagmurRotasi2D.Campaign2D
                 pipes = new List<PipeSpawnData2D>(pipes),
                 infoText = educationalMessage,
                 twoStarScore = twoStarScore,
-                threeStarScore = threeStarScore
+                threeStarScore = threeStarScore,
+                useManualStarLimits = useManualStarLimits,
+                manualThreeStarMoveLimit = manualThreeStarMoveLimit,
+                manualTwoStarMoveLimit = manualTwoStarMoveLimit
             };
         }
     }

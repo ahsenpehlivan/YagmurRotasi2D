@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using YagmurRotasi2D.Audio2D;
 
 namespace YagmurRotasi2D.Visual2D
 {
@@ -88,6 +89,13 @@ namespace YagmurRotasi2D.Visual2D
                 if (animator == null) continue;
                 animator.PlayFromStart();
             }
+            // flowerRoot is already active before success (flowers idle at frame
+            // 0 - see ApplyDefaultVisualState), so hooking the sparkle sound to
+            // "flowerRoot activated" would fire on every level load. This is the
+            // one place PlayFromStart() is actually called on the flower
+            // animators for a genuine success - fires exactly once per
+            // PlaySuccessFX call.
+            GameAudioManager2D.Instance?.PlaySparkleSuccess();
 
             if (duckRoot != null) duckRoot.SetActive(true);
             if (duckAnimators != null)
@@ -98,6 +106,9 @@ namespace YagmurRotasi2D.Visual2D
                     animator.PlayFromStart();
                 }
             }
+            // duckRoot is inactive at all other times (see ApplyDefaultVisualState),
+            // so this is genuinely unique to a real success.
+            GameAudioManager2D.Instance?.PlayDuckSuccess();
 
             activeCoroutine = StartCoroutine(RunSuccessTimer(onCompleted, runId));
         }

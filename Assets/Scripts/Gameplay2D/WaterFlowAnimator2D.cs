@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using YagmurRotasi2D.Audio2D;
 using YagmurRotasi2D.Visual2D;
 
 namespace YagmurRotasi2D.Gameplay2D
@@ -52,7 +53,17 @@ namespace YagmurRotasi2D.Gameplay2D
                 activeCoroutine = null;
             }
 
+            // Covers level reset/reload and any other cancellation path - safe
+            // even if the water-flow sound was never started or already stopped.
+            GameAudioManager2D.Instance?.StopWaterFlow();
+
             GameState2D.IsInputLocked = false;
+        }
+
+        /// <summary>A stale looping water-flow sound must never survive into MainMenuScene2D/LevelSelectScene2D - this fires on scene unload (Unity calls OnDisable before destroying scene objects) as well as any other disable of this component.</summary>
+        private void OnDisable()
+        {
+            GameAudioManager2D.Instance?.StopWaterFlow();
         }
 
         private IEnumerator RunSequence(IReadOnlyList<IReadOnlyList<PipeFlowStep2D>> flowWaves, SuccessFXController2D successFX, int runId)
@@ -61,10 +72,22 @@ namespace YagmurRotasi2D.Gameplay2D
 
             OnStageTextChanged?.Invoke("Su akıyor...");
 
+            // Real start of visible water movement - never reached during
+            // route validation/solving (OnStartWaterPressed only calls
+            // PlaySuccess, which starts this coroutine, after the route
+            // already passed every check), so the loop never starts on a
+            // failed/leaking attempt.
+            GameAudioManager2D.Instance?.StartWaterFlow();
+
             foreach (IReadOnlyList<PipeFlowStep2D> wave in flowWaves)
             {
                 yield return PlayWaveAndWait(wave, runId);
             }
+
+            // Visible pipe-fill movement has now finished - stop the loop here,
+            // before the separate flower/duck success presentation begins
+            // (that has its own dedicated duck/sparkle one-shot sounds).
+            GameAudioManager2D.Instance?.StopWaterFlow();
 
             // The info panel must only open after the full 6-second flower/duck
             // success presentation settles, so we wait for its completion callback here.

@@ -10,6 +10,12 @@ namespace YagmurRotasi2D.UI2D
     /// button) independently of the old InfoPanel hierarchy. All three star
     /// GameObjects/Images are always active and visible - "unearned" is
     /// represented only by reduced alpha on the same sprite, never by hiding it.
+    /// bodyText (the existing gray content area) also doubles as the
+    /// educational water-awareness message slot - SetWaterMessage() (called
+    /// right after Show()) overwrites it with the completed level's message
+    /// from YagmurRotasi2D.Education2D.WaterMessageCatalog2D. No separate
+    /// message area/GameObject exists - reusing this same field/hierarchy is
+    /// deliberate, not an oversight.
     /// </summary>
     public class SuccessPanelView2D : MonoBehaviour
     {
@@ -115,6 +121,18 @@ namespace YagmurRotasi2D.UI2D
             if (root != null) root.SetActive(false);
 
             IsVisible = false;
+        }
+
+        /// <summary>
+        /// Overwrites the existing gray body area (bodyText - the same field
+        /// Show()'s "body" parameter sets) with the completed level's
+        /// educational water-awareness message. Call AFTER Show() so this is
+        /// the value that actually stays on screen; a plain text assignment,
+        /// completely independent of stars/score/progress saving.
+        /// </summary>
+        public void SetWaterMessage(string message)
+        {
+            if (bodyText != null) bodyText.text = message;
         }
 
         /// <summary>Updates only the star alphas - all three stars remain active/enabled/visible regardless of earnedStars.</summary>

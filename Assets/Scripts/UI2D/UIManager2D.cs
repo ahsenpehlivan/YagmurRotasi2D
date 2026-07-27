@@ -3,6 +3,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using YagmurRotasi2D.Education2D;
 using YagmurRotasi2D.Gameplay2D;
 using YagmurRotasi2D.Visual2D;
 
@@ -44,6 +45,15 @@ namespace YagmurRotasi2D.UI2D
         [SerializeField] private Button fullscreenButton;
         [SerializeField] private WebFullscreenController2D fullscreenController;
 
+        [Tooltip("Phase 9C: 'Ayarlar' button living inside the desktop ControlPanel - opens the exact same DedicatedInGameMenu as the top-bar MenuButton (HandleMenuButtonPressed), just a second entry point next to Suyu Başlat/Sıfırla so all three priority actions are visible in one place. Optional - null-checked, top MenuButton keeps working either way.")]
+        [SerializeField] private Button settingsButton;
+
+        [Tooltip("Phase 9C: ControlPanel's own level-name/grid-size/move-count labels (LevelDetails/StatsArea) - separate Text elements from the compact TopHUD badges (levelNameText/moveText) so both can show the same data without one field pointing two places at once.")]
+        [SerializeField] private Text controlPanelLevelText;
+        [SerializeField] private Text controlPanelGridSizeText;
+        [SerializeField] private Text controlPanelStatsText;
+        [SerializeField] private BoardManager2D boardManagerForDisplay;
+
         private const string ReadyMessage = "Hazır";
         private const string SuccessMessage = "Su hedefe ulaştı!";
         private const string FailMessage = "Bağlantı eksik!";
@@ -81,6 +91,11 @@ namespace YagmurRotasi2D.UI2D
             if (fullscreenButton != null && fullscreenController != null)
             {
                 fullscreenButton.onClick.AddListener(fullscreenController.ToggleFullscreen);
+            }
+
+            if (settingsButton != null)
+            {
+                settingsButton.onClick.AddListener(HandleMenuButtonPressed);
             }
 
             HideInfoPanel();
@@ -226,11 +241,18 @@ namespace YagmurRotasi2D.UI2D
             levelManager.ReloadCurrentLevel();
         }
 
-        /// <summary>Bölüm Seçimine Dön: progress is already saved incrementally elsewhere (GameProgress2D.SetCurrentLevel/MarkLevelCompleted at their own trigger points) - nothing is reset here. Loads LevelSelectScene2D non-additively (Phase 9A - normal gameplay Back no longer returns all the way to MainMenuScene2D); DedicatedInGameMenu/DedicatedSuccessPanel live inside GameScene2D (not DontDestroyOnLoad) so they're simply destroyed with the rest of the scene, never duplicated. Shared by both the in-game pause menu and the success panel's "Bölüm Seçimine Dön" button - one implementation, like HandleNextLevelRequested below.</summary>
+        /// <summary>Bölüm Seçimine Dön: progress is already saved incrementally elsewhere (GameProgress2D.SetCurrentLevel/MarkLevelCompleted at their own trigger points) - nothing is reset here. Loads LevelSelectScene2D non-additively (Phase 9A - normal gameplay Back no longer returns all the way to MainMenuScene2D); DedicatedInGameMenu/DedicatedSuccessPanel live inside GameScene2D (not DontDestroyOnLoad) so they're simply destroyed with the rest of the scene, never duplicated. Shared by the in-game pause menu, the success panel's "Bölüm Seçimine Dön" button, and the gameplay top bar's direct Back button (GameSceneBackButtonForwarder2D, via ReturnToLevelSelect() below) - one implementation, like HandleNextLevelRequested below. waterFlowAnimator.CancelActiveAnimation() is safe to call even when nothing is running (its own doc guarantee) - required so the top-bar Back button can never leave GameState2D.IsInputLocked stuck true if pressed mid water-flow animation; the pause-menu path can never actually reach this method while animation is running (CanOpenInGameMenu already refuses to open the menu while GameState2D.IsInputLocked is true), so it stays a no-op there.</summary>
         private void HandleReturnToLevelSelectRequested()
         {
+            waterFlowAnimator.CancelActiveAnimation();
             inGameMenu.Hide();
             SceneManager.LoadScene(LevelSelectSceneName);
+        }
+
+        /// <summary>Public entry point so any button that should behave exactly like "Bölüm Seçimine Dön" (currently only the gameplay top bar's direct Back button) can trigger it without UIManager2D needing a new serialized field for that one extra button reference.</summary>
+        public void ReturnToLevelSelect()
+        {
+            HandleReturnToLevelSelectRequested();
         }
 
         /// <summary>The single implementation of "advance to the next level" - used by both the legacy InfoNextLevelButton and dedicatedSuccessPanel's Next Level button.</summary>
@@ -304,12 +326,14 @@ namespace YagmurRotasi2D.UI2D
 
             if (success)
             {
-                // Score is still calculated (StarCount depends on it) but is never
-                // shown to the player - only the resulting star count is displayed.
-                // ReachableTiles.Count is the branching-aware equivalent of the old
-                // linear path length (same value for any Straight/Corner-only route).
-                scoreManager.CalculateSuccess(
-                    result.ReachableTiles.Count, levelManager.CurrentTwoStarScore, levelManager.CurrentThreeStarScore);
+                // CurrentScore is purely a numeric display value (Skor: on the
+                // success panel) - stars are never derived from it. The one
+                // and only star source is scoreManager.CurrentStarRating,
+                // already kept live and up to date by every accepted move
+                // (see ScoreManager2D.RegisterMove/ResetState). ReachableTiles
+                // .Count is the branching-aware equivalent of the old linear
+                // path length (same value for any Straight/Corner-only route).
+                scoreManager.CalculateSuccess(result.ReachableTiles.Count);
 
                 SetGameplayButtonsInteractable(false);
                 waterFlowAnimator.PlaySuccess(result.FlowSteps, successFXController);
@@ -336,8 +360,15 @@ namespace YagmurRotasi2D.UI2D
 
             // Recorded at the moment of completion (not when Next Level is
             // pressed) so the earned stars persist even if the player closes the
-            // app while looking at the success panel without advancing.
-            GameProgress2D.MarkLevelCompleted(levelManager.CurrentLevelIndex + 1, scoreManager.StarCount);
+            // app while looking at the success panel without advancing. No
+            // further move can happen between success and this point (input
+            // stays locked through the whole flow/success animation), so
+            // CurrentStarRating here is exactly the live preview the player
+            // last saw - the single authoritative earned-stars value, never a
+            // second formula. GameProgress2D.MarkLevelCompleted itself still
+            // keeps the best historical result (Mathf.Max-style) untouched.
+            int earnedStars = scoreManager.CurrentStarRating;
+            GameProgress2D.MarkLevelCompleted(levelManager.CurrentLevelIndex + 1, earnedStars);
 
             if (dedicatedSuccessPanel != null)
             {
@@ -347,7 +378,7 @@ namespace YagmurRotasi2D.UI2D
                 bool hasNextLevel = levelManager.CurrentLevelIndex + 1 < levelManager.LevelCount;
 
                 dedicatedSuccessPanel.Show(
-                    scoreManager.StarCount,
+                    earnedStars,
                     "Tebrikler!",
                     levelManager.CurrentInfoText,
                     scoreManager.CurrentScore,
@@ -356,12 +387,34 @@ namespace YagmurRotasi2D.UI2D
                     HandleNextLevelRequested,
                     HandleRestartRequested,
                     HandleReturnToLevelSelectRequested);
+
+                // Educational water-awareness message for the just-completed
+                // level (looked up by level number, never by earnedStars/
+                // score) - overwrites the existing gray body area Show()
+                // just set, reusing that same field/hierarchy rather than a
+                // separate message section. Purely a text assignment: does
+                // not influence earnedStars, does not touch GameProgress2D,
+                // and never delays this call.
+                WaterMessageEntry2D waterMessage = WaterMessageCatalog2D.GetMessageForLevel(levelManager.CurrentLevelIndex + 1);
+                dedicatedSuccessPanel.SetWaterMessage(waterMessage.message);
             }
         }
 
+        /// <summary>
+        /// The single update path for every move-driven HUD element - fired
+        /// only from LevelManager2D.OnPlayerMoved, which itself only fires
+        /// after ScoreManager2D.RegisterMove() has already run (see
+        /// LevelManager2D.HandlePipeRotatedByPlayer), so scoreManager.
+        /// MoveCount/CurrentStarRating are always already up to date here.
+        /// Both move counters (top moveText and lower-right
+        /// controlPanelStatsText) and the lower-right live star preview all
+        /// read the same ScoreManager2D state - none of them keep a local
+        /// count of their own.
+        /// </summary>
         private void HandlePlayerMoved()
         {
             UpdateMoveText();
+            UpdateStarImages(scoreManager.CurrentStarRating);
         }
 
         private void HandleLevelLoaded()
@@ -385,9 +438,24 @@ namespace YagmurRotasi2D.UI2D
                 levelNameText.text = $"Bölüm {levelManager.CurrentLevelIndex + 1}";
             }
 
+            if (controlPanelLevelText != null)
+            {
+                controlPanelLevelText.text = $"Bölüm {levelManager.CurrentLevelIndex + 1}";
+            }
+
+            if (controlPanelGridSizeText != null && boardManagerForDisplay != null)
+            {
+                controlPanelGridSizeText.text = $"{boardManagerForDisplay.Width}×{boardManagerForDisplay.Height}";
+            }
+
             UpdateMoveText();
             HideInfoPanel();
-            UpdateStarImages(0);
+            // scoreManager.ResetState() (already called by LevelManager2D.
+            // LoadLevel before OnLevelLoaded fires) always leaves
+            // CurrentStarRating at 3 for a freshly-loaded/reloaded level -
+            // read live here rather than hardcoding 3, so this stays correct
+            // even if ScoreManager2D's reset behavior ever changes.
+            UpdateStarImages(scoreManager.CurrentStarRating);
             if (dedicatedSuccessPanel != null)
             {
                 dedicatedSuccessPanel.Hide();
@@ -408,6 +476,11 @@ namespace YagmurRotasi2D.UI2D
             if (moveText != null)
             {
                 moveText.text = $"Hamle: {scoreManager.MoveCount}";
+            }
+
+            if (controlPanelStatsText != null)
+            {
+                controlPanelStatsText.text = $"Hamle: {scoreManager.MoveCount}";
             }
         }
 

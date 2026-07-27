@@ -38,7 +38,12 @@ public static class SuccessPanelPrefabBuilder
     // spec's suggested sizes, needed purely for arithmetic consistency.
     private const float MainPanelWidth = 780f;
     // Phase 9B: grown from 950 to fit the new StatsText row (score/moves)
-    // inserted between StarTray and the button row.
+    // inserted between StarTray and the button row. An education-phase
+    // change briefly grew this to 1180 to fit two new WaterMessageTypeText/
+    // WaterMessageText objects - that approach was reverted (the existing
+    // gray BodyText area is reused for the educational message instead, see
+    // BodyPanel/BodyText below and SuccessPanelView2D.SetWaterMessage), so
+    // this is back to its original 1020.
     private const float MainPanelHeight = 1020f;
     private const float MainPanelInset = 28f;
 
@@ -77,6 +82,12 @@ public static class SuccessPanelPrefabBuilder
 
     private const float StatsTextHeight = 50f;
     private const float StatsGapAboveMargin = 16f;
+
+    // Names of the education-phase objects this builder briefly created
+    // directly under MainPanel and has since reverted - kept only so
+    // RemoveLegacyWaterMessageObjects can find and delete any leftovers from
+    // that earlier builder run. Never (re)created below.
+    private static readonly string[] LegacyWaterMessageObjectNames = { "WaterMessageTypeText", "WaterMessageText" };
 
     // Phase 7E.7: BodyText readability - Best Fit between these two sizes.
     private const int BodyTextMinSize = 32;
@@ -260,6 +271,18 @@ public static class SuccessPanelPrefabBuilder
             Text statsText = SetupText(statsTextGO, "Skor: 0   Hamle: 0", shPinscherFont, 32, Color.black, TextAnchor.MiddleCenter, false);
             log.Add($"StatsText: plain Text (no background panel), '{shPinscherFont.name}' size 32 - shows score/move count set by UIManager2D.HandleAnimationComplete.");
 
+            // Idempotent cleanup: an earlier education-phase builder run may have
+            // left WaterMessageTypeText/WaterMessageText behind directly under
+            // MainPanel - the educational message now reuses the existing
+            // BodyText field above instead (see SuccessPanelView2D.
+            // SetWaterMessage), so these are removed rather than recreated. A
+            // fresh/already-clean prefab has nothing to find here.
+            int removedLegacyCount = RemoveLegacyWaterMessageObjects(mainPanel.transform);
+            if (removedLegacyCount > 0)
+            {
+                log.Add($"Removed {removedLegacyCount} leftover object(s) from the reverted WaterMessageTypeText/WaterMessageText approach.");
+            }
+
             // ---------------- NextLevelButton / RetryButton / ReturnToLevelSelectButton (Phase 9B: one row of three) ----------------
             float buttonTop = statsTop - (StatsTextHeight + ButtonGapAboveMargin);
 
@@ -396,9 +419,11 @@ public static class SuccessPanelPrefabBuilder
             {
                 Debug.Log($"SuccessPanelPrefabBuilder: {(prefabExists ? "updated" : "created")} '{PrefabPath}'.\n" +
                     "Hierarchy: SuccessPanel2D > ModalBlocker, PanelShadow, MainPanel > MainPanelInset, TitleBadge > " +
-                    "TitleBadgeInset, TitleText; BodyPanel > BodyPanelInset, BodyText; StarTray > StarTrayInset, " +
-                    "StarRow > StarSlot_0..2 > StarBackground, Star_N; StatsText (Phase 9B - score/moves); " +
-                    "NextLevelButton, RetryButton, ReturnToLevelSelectButton (Phase 9B - one row of three) each > ButtonInset, Label.\n" +
+                    "TitleBadgeInset, TitleText; BodyPanel > BodyPanelInset, BodyText (also shows the educational " +
+                    "water-awareness message via SuccessPanelView2D.SetWaterMessage - no separate message area); " +
+                    "StarTray > StarTrayInset, StarRow > StarSlot_0..2 > StarBackground, Star_N; StatsText " +
+                    "(Phase 9B - score/moves); NextLevelButton, RetryButton, ReturnToLevelSelectButton " +
+                    "(Phase 9B - one row of three) each > ButtonInset, Label.\n" +
                     string.Join("\n", log));
             }
         }
@@ -590,6 +615,22 @@ public static class SuccessPanelPrefabBuilder
         }
 
         return true;
+    }
+
+    /// <summary>Deletes any direct child of mainPanel named in LegacyWaterMessageObjectNames, if present - safe/idempotent (a no-op once already clean), never recreates them. Returns how many were actually removed, purely for the build log.</summary>
+    private static int RemoveLegacyWaterMessageObjects(Transform mainPanel)
+    {
+        int removed = 0;
+        foreach (string objectName in LegacyWaterMessageObjectNames)
+        {
+            Transform existing = mainPanel.Find(objectName);
+            if (existing != null)
+            {
+                Object.DestroyImmediate(existing.gameObject);
+                removed++;
+            }
+        }
+        return removed;
     }
 
     private static readonly Vector2 Center = new Vector2(0.5f, 0.5f);

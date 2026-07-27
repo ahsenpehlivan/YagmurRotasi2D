@@ -11,9 +11,12 @@ namespace YagmurRotasi2D.UI2D
     /// the campaign catalog (the single source of truth - CampaignLevelCatalog2D,
     /// the same Resources asset LevelManager2D.ResolveLevels() loads), and
     /// handles Back (-&gt; MainMenuScene2D) and level-card clicks (validate -&gt;
-    /// CampaignSession2D.SetSelectedLevel -&gt; load GameScene2D). Every level is
-    /// currently unlocked and never completed (Phase 9A Part F - no save system
-    /// yet); see LevelButton2D.Configure for the forward-compatible API shape.
+    /// CampaignSession2D.SetSelectedLevel -&gt; load GameScene2D). Locked/unlocked
+    /// and star display are driven by GameProgress2D (HighestUnlockedLevel/
+    /// GetBestStars) - the single source of truth for saved progress, read
+    /// fresh here on every PopulateLevelCards() call. bestScore has no
+    /// persisted store (GameProgress2D only ever saved best-stars-per-level,
+    /// per the project's progress-system scope) and stays 0.
     /// </summary>
     public class LevelSelectController2D : MonoBehaviour
     {
@@ -84,12 +87,19 @@ namespace YagmurRotasi2D.UI2D
                 int pipeCount = definition.pipes != null ? definition.pipes.Count : 0;
                 string devInfo = $"{definition.gridWidth}x{definition.gridHeight} | {pipeCount} pipes | {definition.generatorVersion}";
 
-                // Part F preparation: isUnlocked/isCompleted/earnedStars/bestScore
-                // are already real parameters on LevelButton2D.Configure - always
-                // true/false/0/0 for now (no save system yet), never PlayerPrefs.
+                // Driven by GameProgress2D (the single saved-progress source of
+                // truth): a level is unlocked once it's <= HighestUnlockedLevel,
+                // and "completed" means it was ever finished at least once -
+                // ScoreManager2D.CurrentStarRating can never fall below 1 after
+                // a genuine completion, so earnedStars > 0 is a reliable
+                // completed check.
+                int earnedStars = GameProgress2D.GetBestStars(levelNumber);
+                bool isUnlocked = levelNumber <= GameProgress2D.HighestUnlockedLevel;
+                bool isCompleted = earnedStars > 0;
+
                 card.Configure(
                     levelNumber, definition.gridWidth, definition.gridHeight,
-                    isUnlocked: true, isCompleted: false, earnedStars: 0, bestScore: 0,
+                    isUnlocked, isCompleted, earnedStars, bestScore: 0,
                     devInfo, HandleLevelCardClicked);
             }
         }
@@ -104,6 +114,15 @@ namespace YagmurRotasi2D.UI2D
             if (!exists)
             {
                 Debug.LogError($"LevelSelectController2D: Level {levelNumber} does not exist in the campaign catalog - not loading gameplay.");
+                return;
+            }
+
+            // Defense-in-depth on top of the card's own button.interactable=false
+            // (set from isUnlocked in PopulateLevelCards) - a locked level can
+            // never be loaded even if a click somehow still reaches here.
+            if (levelNumber > GameProgress2D.HighestUnlockedLevel)
+            {
+                Debug.LogWarning($"LevelSelectController2D: Level {levelNumber} is locked - not loading gameplay.");
                 return;
             }
 

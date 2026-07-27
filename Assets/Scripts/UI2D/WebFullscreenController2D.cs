@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace YagmurRotasi2D.UI2D
@@ -11,17 +12,50 @@ namespace YagmurRotasi2D.UI2D
     /// on WebGL. One instance is shared per scene (Main Menu, Level Select
     /// header, Gameplay top bar each wire their own "Tam Ekran" button to the
     /// same simple API).
+    ///
+    /// On WebGL, Unity's own Screen.fullScreen setter does not reliably issue
+    /// a real browser requestFullscreen() call synchronously within the
+    /// click's call stack, so browsers silently refuse it. WebFullscreen2D.jslib
+    /// calls requestFullscreen()/exitFullscreen() directly against the existing
+    /// #unity-container/#unity-canvas element instead - this method must keep
+    /// calling it directly (no coroutine, no delayed invocation) so the
+    /// browser still sees it as originating from the user gesture.
     /// </summary>
     public class WebFullscreenController2D : MonoBehaviour
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        private static extern void YagmurRotasi_RequestFullscreen();
+
+        [DllImport("__Internal")]
+        private static extern void YagmurRotasi_ExitFullscreen();
+
+        [DllImport("__Internal")]
+        private static extern int YagmurRotasi_IsFullscreen();
+#endif
+
         public void ToggleFullscreen()
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
-            Screen.fullScreen = !Screen.fullScreen;
+            try
+            {
+                if (YagmurRotasi_IsFullscreen() != 0)
+                {
+                    YagmurRotasi_ExitFullscreen();
+                }
+                else
+                {
+                    YagmurRotasi_RequestFullscreen();
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"WebFullscreenController2D: fullscreen toggle failed - {e.Message}");
+            }
 #else
-            // Editor/Standalone: Screen.fullScreen still works (harmless no-op
-            // risk is only that some platforms silently ignore it), kept
-            // identical so behavior is testable without a Web build.
+            // Editor/Standalone: no browser to talk to, Screen.fullScreen is the
+            // correct (and only) mechanism here, kept so behavior is testable
+            // without a Web build.
             Screen.fullScreen = !Screen.fullScreen;
 #endif
         }

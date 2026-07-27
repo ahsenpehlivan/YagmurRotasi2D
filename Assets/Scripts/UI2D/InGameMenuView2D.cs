@@ -119,13 +119,33 @@ namespace YagmurRotasi2D.UI2D
 
         private void HandleMusicTogglePressed()
         {
-            GameAudioSettings2D.ToggleMusic();
+            bool newValue = !GameAudioSettings2D.MusicEnabled;
+            if (GameAudioManager2D.Instance != null)
+            {
+                // Routes through the manager (not GameAudioSettings2D
+                // directly) so the actual MusicAudioSource is muted/unmuted
+                // live - GameAudioSettings2D alone only stores the
+                // preference, it has no playback of its own to react to it.
+                GameAudioManager2D.Instance.SetMusicEnabled(newValue);
+            }
+            else
+            {
+                GameAudioSettings2D.SetMusicEnabled(newValue);
+            }
             RefreshToggleTexts();
         }
 
         private void HandleSfxTogglePressed()
         {
-            GameAudioSettings2D.ToggleSfx();
+            bool newValue = !GameAudioSettings2D.SfxEnabled;
+            if (GameAudioManager2D.Instance != null)
+            {
+                GameAudioManager2D.Instance.SetSFXEnabled(newValue);
+            }
+            else
+            {
+                GameAudioSettings2D.SetSfxEnabled(newValue);
+            }
             RefreshToggleTexts();
         }
 

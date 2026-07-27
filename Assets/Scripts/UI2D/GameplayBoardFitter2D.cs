@@ -33,6 +33,19 @@ namespace YagmurRotasi2D.UI2D
     /// the same inputs always produce the identical output - no cumulative
     /// drift is possible since nothing is ever multiplied onto the previous
     /// frame's result).
+    ///
+    /// Phase 9C: the board-area rect is no longer a pair of hand-tuned
+    /// camera-viewport-fraction constants - it is read directly from
+    /// BoardViewport's actual on-screen RectTransform every recompute (its
+    /// 4 world corners -> screen pixels via RectTransformUtility.
+    /// WorldToScreenPoint(null, ...), since GameCanvas is Screen Space -
+    /// Overlay -> normalized to a 0..1 viewport fraction -> fed into the
+    /// same Camera.ViewportToWorldPoint math as before). This keeps the
+    /// board correctly fitted even if BoardViewport's real width changes for
+    /// a reason other than a raw screen resize (e.g. ControlPanel's
+    /// LayoutElement clamping between its min/max width at an unusual
+    /// aspect ratio) - the old fixed fractions could silently drift out of
+    /// sync with BoardViewport's real rect in exactly that case.
     /// </summary>
     public class GameplayBoardFitter2D : MonoBehaviour
     {
@@ -41,9 +54,10 @@ namespace YagmurRotasi2D.UI2D
         [SerializeField] private WebViewportState2D viewportState;
         [SerializeField] private LevelManager2D levelManager;
 
-        [Header("Board area rect, in camera viewport fractions (0..1)")]
-        [SerializeField] private Vector2 boardAreaMin = new Vector2(0.02f, 0.04f);
-        [SerializeField] private Vector2 boardAreaMax = new Vector2(0.70f, 0.92f);
+        [Tooltip("The gameplay board's on-screen slot (SafeAreaRoot/MainGameplayArea/BoardViewport) - its actual screen rect is read every recompute, never a hardcoded fraction.")]
+        [SerializeField] private RectTransform boardViewport;
+
+        private readonly Vector3[] worldCornersBuffer = new Vector3[4];
 
         private float lastAppliedScale = -1f;
         private Vector3 lastAppliedPosition = new Vector3(float.NaN, float.NaN, float.NaN);
@@ -93,8 +107,37 @@ namespace YagmurRotasi2D.UI2D
 
         private void Recompute(bool force)
         {
-            if (targetCamera == null || boardFitContainer == null)
+            if (targetCamera == null || boardFitContainer == null || boardViewport == null)
                 return;
+
+            // Force any pending layout rebuild (HorizontalLayoutGroup/
+            // VerticalLayoutGroup rebuilds are deferred, not immediate) to
+            // complete before reading BoardViewport's rect. Without this,
+            // the very first Recompute() (called from OnEnable, before
+            // Unity's layout system has run even once) reads a stale/
+            // default-sized RectTransform instead of the real laid-out one -
+            // the confirmed cause of the board rendering permanently tiny
+            // after the first load, since nothing else re-triggers a
+            // recompute unless the window is actually resized afterward.
+            Canvas.ForceUpdateCanvases();
+
+            // Step 1-2 (Part E): read BoardViewport's actual screen-space
+            // rectangle and convert it to the camera's viewport fractions.
+            // GetWorldCorners order is documented as [0]=bottom-left,
+            // [1]=top-left, [2]=top-right, [3]=bottom-right. Camera is
+            // passed as null to WorldToScreenPoint because GameCanvas is
+            // Screen Space - Overlay (no render camera - Overlay canvas
+            // world corners already correspond 1:1 to screen pixels, and
+            // null is Unity's documented convention for that case).
+            boardViewport.GetWorldCorners(worldCornersBuffer);
+            Vector2 screenBottomLeft = RectTransformUtility.WorldToScreenPoint(null, worldCornersBuffer[0]);
+            Vector2 screenTopRight = RectTransformUtility.WorldToScreenPoint(null, worldCornersBuffer[2]);
+
+            float screenWidth = Mathf.Max(1f, Screen.width);
+            float screenHeight = Mathf.Max(1f, Screen.height);
+
+            Vector2 viewportMin = new Vector2(screenBottomLeft.x / screenWidth, screenBottomLeft.y / screenHeight);
+            Vector2 viewportMax = new Vector2(screenTopRight.x / screenWidth, screenTopRight.y / screenHeight);
 
             // z distance from the camera to the board's own Z plane (0) -
             // irrelevant to the resulting X/Y for an orthographic camera
@@ -103,8 +146,8 @@ namespace YagmurRotasi2D.UI2D
             // a magic constant.
             float boardPlaneDistance = Mathf.Abs(targetCamera.transform.position.z);
 
-            Vector3 bottomLeft = targetCamera.ViewportToWorldPoint(new Vector3(boardAreaMin.x, boardAreaMin.y, boardPlaneDistance));
-            Vector3 topRight = targetCamera.ViewportToWorldPoint(new Vector3(boardAreaMax.x, boardAreaMax.y, boardPlaneDistance));
+            Vector3 bottomLeft = targetCamera.ViewportToWorldPoint(new Vector3(viewportMin.x, viewportMin.y, boardPlaneDistance));
+            Vector3 topRight = targetCamera.ViewportToWorldPoint(new Vector3(viewportMax.x, viewportMax.y, boardPlaneDistance));
 
             float areaWidth = topRight.x - bottomLeft.x;
             float areaHeight = topRight.y - bottomLeft.y;

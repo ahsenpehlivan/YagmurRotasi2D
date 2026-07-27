@@ -179,9 +179,14 @@ public static class WebLayoutValidator2D
             return false;
         }
 
-        var fitterSO = new SerializedObject(fitter);
-        Vector2 areaMin = fitterSO.FindProperty("boardAreaMin").vector2Value;
-        Vector2 areaMax = fitterSO.FindProperty("boardAreaMax").vector2Value;
+        GameObject canvasGO = GameObject.Find("Canvas");
+        CanvasScaler scaler = canvasGO != null ? canvasGO.GetComponent<CanvasScaler>() : null;
+        if (scaler == null)
+        {
+            lines.Add("FAIL: Canvas/CanvasScaler not found.");
+            return false;
+        }
+
         float orthoSize = camera.orthographicSize;
 
         var gameplayLevels = new (int LevelNumber, int GridSize)[] { (1, 5), (18, 6), (50, 8), (100, 10) };
@@ -189,6 +194,33 @@ public static class WebLayoutValidator2D
         bool ok = true;
         foreach (var (name, w, h) in TargetViewports)
         {
+            // Phase 9C: GameplayBoardFitter2D no longer uses fixed camera-
+            // viewport fractions - it reads BoardViewport's real screen rect.
+            // Replicated here analytically (in canvas units, where the ratio
+            // to canvas width/height is scale-invariant so it equals a 0..1
+            // viewport fraction directly) using GameSceneWebLayoutBuilder2D's
+            // own constants for MainGameplayArea/ControlPanel, matching its
+            // actual HorizontalLayoutGroup math: ControlPanel gets
+            // ControlPanelPreferredWidth clamped to [ControlPanelMinWidth,
+            // available], BoardViewport gets whatever's left after spacing.
+            float scale = ComputeCanvasScaleFactor(scaler.referenceResolution, scaler.matchWidthOrHeight, w, h);
+            float canvasWidth = w / Mathf.Max(scale, 0.0001f);
+            float canvasHeight = h / Mathf.Max(scale, 0.0001f);
+
+            float mainAreaWidth = canvasWidth - GameSceneWebLayoutBuilder2D.ContentPadding * 2f;
+            float mainAreaHeight = canvasHeight - GameSceneWebLayoutBuilder2D.TopBarHeight - GameSceneWebLayoutBuilder2D.ContentPadding * 2f;
+            float availableForControlPanel = Mathf.Max(0f, mainAreaWidth - GameSceneWebLayoutBuilder2D.MainAreaSpacing - GameSceneWebLayoutBuilder2D.ControlPanelMinWidth);
+            float controlPanelWidth = Mathf.Clamp(GameSceneWebLayoutBuilder2D.ControlPanelPreferredWidth, GameSceneWebLayoutBuilder2D.ControlPanelMinWidth, GameSceneWebLayoutBuilder2D.ControlPanelMinWidth + availableForControlPanel);
+            float boardViewportWidth = Mathf.Max(0f, mainAreaWidth - GameSceneWebLayoutBuilder2D.MainAreaSpacing - controlPanelWidth);
+            float boardViewportHeight = mainAreaHeight;
+
+            Vector2 areaMin = new Vector2(
+                GameSceneWebLayoutBuilder2D.ContentPadding / Mathf.Max(canvasWidth, 1f),
+                GameSceneWebLayoutBuilder2D.ContentPadding / Mathf.Max(canvasHeight, 1f));
+            Vector2 areaMax = new Vector2(
+                (GameSceneWebLayoutBuilder2D.ContentPadding + boardViewportWidth) / Mathf.Max(canvasWidth, 1f),
+                (GameSceneWebLayoutBuilder2D.ContentPadding + boardViewportHeight) / Mathf.Max(canvasHeight, 1f));
+
             float aspect = w / (float)h;
             // Camera viewport-fraction -> world-space extents (orthographic,
             // z-independent) - same math as GameplayBoardFitter2D.Recompute,

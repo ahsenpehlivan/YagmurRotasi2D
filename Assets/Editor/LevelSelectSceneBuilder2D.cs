@@ -1,4 +1,5 @@
 using System.Linq;
+using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -27,8 +28,7 @@ public static class LevelSelectSceneBuilder2D
     private const string UiFolder = "Assets/Art2D/FinalSprites/UI";
     private const string FontPath = "Assets/SHPinscher-Regular11/SHPinscher-Regular.otf";
     private const string LevelButtonPrefabPath = LevelButtonPrefabBuilder2D.PrefabPath;
-
-    private static readonly Color BackgroundColor = new Color(0.86f, 0.93f, 0.98f, 1f); // pastel sky blue - not gameplay board art, not MainMenu art
+    private const string BackgroundPath = "Assets/Art2D/FinalSprites/Background/background.png";
 
     // Phase 9B: shorter than the Phase 9A portrait value (190) - a landscape
     // 1080-tall viewport has much less vertical room to spare on chrome.
@@ -64,20 +64,30 @@ public static class LevelSelectSceneBuilder2D
         TryBuildScene(true);
     }
 
+    // Part D readability fix - Back/Fullscreen button labels.
+    private const float BackLabelFontSize = 28f;
+    private const float FullscreenLabelFontSize = 26f;
+    private static readonly Color ButtonLabelOutline = new Color(0.20f, 0.11f, 0.05f, 0.85f); // dark brown, matches the brown.png button art
+
     public static bool TryBuildScene(bool logDetails)
     {
+        // "Bölüm Seç" title stays legacy Text via shPinscherFont, byte-for-byte
+        // unchanged per spec ("must remain visually unchanged") - only
+        // Back/Fullscreen button labels below migrate to TMP.
         Font shPinscherFont = AssetDatabase.LoadAssetAtPath<Font>(FontPath);
+        TMP_FontAsset tmpFont = TMPTextSetup2D.GetOrCreateFontAsset();
         Sprite panelBase = LoadFirstSprite(UiFolder + "/Panels/tan.png");
         Sprite badgeWhite = LoadFirstSprite(UiFolder + "/Badges/white.png");
         Sprite badgeWhiteInlay = LoadFirstSprite(UiFolder + "/Badges/white_inlay.png");
         Sprite buttonBase = LoadFirstSprite(UiFolder + "/Buttons/brown.png");
         Sprite buttonInlay = LoadFirstSprite(UiFolder + "/Buttons/brown_inlay.png");
         Sprite buttonPressed = LoadFirstSprite(UiFolder + "/Buttons/brown_pressed.png");
+        Sprite backgroundSprite = LoadFirstSprite(BackgroundPath);
         GameObject levelButtonPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(LevelButtonPrefabPath);
 
-        if (shPinscherFont == null || badgeWhite == null || buttonBase == null)
+        if (shPinscherFont == null || tmpFont == null || badgeWhite == null || buttonBase == null || backgroundSprite == null)
         {
-            Debug.LogError("LevelSelectSceneBuilder2D: one or more required UI package assets could not be loaded (see warnings above). Aborting.");
+            Debug.LogError("LevelSelectSceneBuilder2D: one or more required UI package assets could not be loaded/created (see warnings above). Aborting.");
             return false;
         }
 
@@ -146,10 +156,19 @@ public static class LevelSelectSceneBuilder2D
         if (fullscreenController == null) fullscreenController = canvasGO.AddComponent<WebFullscreenController2D>();
 
         // ---------------- Background ----------------
+        // Same cover-fit approach as MainMenuSceneBuilder2D's background:
+        // AspectRatioFitter.EnvelopeParent scales the RectTransform to fully
+        // cover the stretched parent while preserving the source image's
+        // aspect ratio (crops overflow instead of distorting/letterboxing).
         GameObject background = FindOrCreateChild(safeAreaRoot.transform, "LevelSelectBackground");
         StretchFill(RectOf(background), 0f);
         background.transform.SetAsFirstSibling();
-        SetupImage(background, null, false, BackgroundColor);
+        Image backgroundImage = SetupImage(background, backgroundSprite, false, Color.white);
+        backgroundImage.preserveAspect = false;
+        var backgroundFitter = background.GetComponent<AspectRatioFitter>();
+        if (backgroundFitter == null) backgroundFitter = background.AddComponent<AspectRatioFitter>();
+        backgroundFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        backgroundFitter.aspectRatio = backgroundSprite.rect.width / backgroundSprite.rect.height;
 
         // ---------------- TitleBar ----------------
         GameObject titleBar = FindOrCreateChild(safeAreaRoot.transform, "TitleBar");
@@ -191,7 +210,9 @@ public static class LevelSelectSceneBuilder2D
         }
         GameObject backLabelGO = FindOrCreateChild(backButtonGO.transform, "Label");
         StretchFill(RectOf(backLabelGO), 0f);
-        SetupText(backLabelGO, "Geri", shPinscherFont, 30, Color.white, TextAnchor.MiddleCenter, false);
+        TMPTextSetup2D.SetupTMPText(backLabelGO, "Geri", tmpFont, BackLabelFontSize, Color.white,
+            TextAlignmentOptions.Center, wrap: false, bold: true,
+            outlineWidth: 0.14f, outlineColor: ButtonLabelOutline);
 
         // ---------------- Fullscreen button (Phase 9B) ----------------
         GameObject fullscreenButtonGO = FindOrCreateChild(titleBar.transform, "FullscreenButton");
@@ -220,9 +241,17 @@ public static class LevelSelectSceneBuilder2D
         }
         GameObject fsLabelGO = FindOrCreateChild(fullscreenButtonGO.transform, "Label");
         StretchFill(RectOf(fsLabelGO), 0f);
-        SetupText(fsLabelGO, "Tam Ekran", shPinscherFont, 24, Color.white, TextAnchor.MiddleCenter, true, bestFit: true, minSize: 16, maxSize: 24);
-        fullscreenButton.onClick.RemoveAllListeners();
-        fullscreenButton.onClick.AddListener(fullscreenController.ToggleFullscreen);
+        TMPTextSetup2D.SetupTMPText(fsLabelGO, "Tam Ekran", tmpFont, FullscreenLabelFontSize, Color.white,
+            TextAlignmentOptions.Center, wrap: true, bold: true, autoSize: true, autoSizeMin: 18f, autoSizeMax: FullscreenLabelFontSize,
+            outlineWidth: 0.14f, outlineColor: ButtonLabelOutline);
+        // Editor-time onClick.AddListener() is never persisted into the saved
+        // scene (same root cause the Back button had) - a self-wiring runtime
+        // component is added instead, which IS persisted.
+        WebFullscreenButtonForwarder2D fullscreenForwarder = fullscreenButton.GetComponent<WebFullscreenButtonForwarder2D>();
+        if (fullscreenForwarder == null) fullscreenForwarder = fullscreenButton.gameObject.AddComponent<WebFullscreenButtonForwarder2D>();
+        SerializedObject fullscreenForwarderSO = new SerializedObject(fullscreenForwarder);
+        fullscreenForwarderSO.FindProperty("fullscreenController").objectReferenceValue = fullscreenController;
+        fullscreenForwarderSO.ApplyModifiedPropertiesWithoutUndo();
 
         // ---------------- ScrollView ----------------
         GameObject scrollViewGO = FindOrCreateChild(safeAreaRoot.transform, "ScrollView");
@@ -358,6 +387,7 @@ public static class LevelSelectSceneBuilder2D
         if (logDetails)
         {
             Debug.Log($"LevelSelectSceneBuilder2D: {(sceneExists ? "updated" : "created")} '{ScenePath}'.\n" +
+                $"  Background: '{backgroundSprite.name}' ({BackgroundPath}) - cover-fit via AspectRatioFitter.EnvelopeParent.\n" +
                 "Hierarchy: Canvas(1920x1080 ref) > SafeAreaRoot > LevelSelectBackground, TitleBar > TitleBadge(+inset+text), " +
                 "BackButton(+inset+Label), FullscreenButton(+inset+Label), ScrollView(ScrollRect) > Viewport(RectMask2D) > " +
                 "Content(GridLayoutGroup+ContentSizeFitter+ResponsiveLevelGrid2D), Scrollbar > SlidingArea > Handle; " +

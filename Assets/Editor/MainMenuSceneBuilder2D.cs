@@ -46,9 +46,30 @@ public static class MainMenuSceneBuilder2D
     private const string UiFolder = "Assets/Art2D/FinalSprites/UI";
     private const string FontPath = "Assets/SHPinscher-Regular11/SHPinscher-Regular.otf";
 
-    private const float MainButtonWidth = 450f;
-    private const float MainButtonHeight = 150f;
-    private const float MainButtonSpacing = 24f;
+    // Phase 9B.1: Play/Settings kept at native 3:1 (matches the source art's
+    // 866x288 aspect exactly - 300x100 is the only point in the requested
+    // 300-360 x 80-100 range that hits 3:1 with zero distortion).
+    private const float MainButtonWidth = 300f;
+    private const float MainButtonHeight = 100f;
+    private const float PrimaryRowSpacing = 32f;
+
+    // ResetProgressButton's source art is ALSO 866x288 (3:1), but the
+    // requested 340-440 x 70-90 range is geometrically incompatible with
+    // that ratio (3:1 in that height band would need ~210-270 width, well
+    // below 340) - the requested pixel range is the more specific/recent
+    // instruction, so it wins; (340,90) is the closest point in the
+    // requested box to 3:1 (ratio 3.78 vs native 3.0), minimizing the
+    // resulting stretch while still satisfying "340-440 wide, 70-90 tall,
+    // slightly wider but visually secondary than Play/Settings".
+    private const float ResetButtonWidth = 340f;
+    private const float ResetButtonHeight = 90f;
+    private const float ButtonAreaSpacing = 26f;
+
+    // Recommended 0.25, adjustable 0.22-0.32 per spec "after inspecting the
+    // title" - 0.26 chosen to sit clearly below the title without being able
+    // to visually verify exact title bounds in this session; nudge within
+    // the sanctioned range if it still reads too close/far in the Editor.
+    private const float ButtonAreaVerticalAnchor = 0.26f;
 
     [MenuItem("YagmurRotasi2D/Build Phase 7E8 Main Menu")]
     public static void BuildMenuCommand()
@@ -158,36 +179,87 @@ public static class MainMenuSceneBuilder2D
         SetupImage(readabilityOverlay, null, false, new Color(0f, 0f, 0f, 0.22f));
         readabilityOverlay.transform.SetSiblingIndex(1);
 
-        // ---------------- MainMenuContent / MainButtonRoot (Phase 9B: side-aligned max-width panel, not a centered portrait column) ----------------
+        // ---------------- MainMenuContent / MainMenuButtonArea (Phase 9B.1: title-safe lower-half layout) ----------------
         GameObject content = FindOrCreateChild(safeAreaRoot.transform, "MainMenuContent");
         StretchFill(RectOf(content), 0f);
 
-        GameObject buttonRoot = FindOrCreateChild(content.transform, "MainButtonRoot");
-        RectTransform buttonRootRt = RectOf(buttonRoot);
-        buttonRootRt.anchorMin = new Vector2(1f, 0.5f);
-        buttonRootRt.anchorMax = new Vector2(1f, 0.5f);
-        buttonRootRt.pivot = new Vector2(1f, 0.5f);
-        buttonRootRt.sizeDelta = new Vector2(MainButtonWidth + 60f, MainButtonHeight * 4f + MainButtonSpacing * 3f);
-        buttonRootRt.anchoredPosition = new Vector2(-120f, 0f);
+        float primaryRowWidth = MainButtonWidth * 2f + PrimaryRowSpacing;
+        float buttonAreaWidth = Mathf.Max(primaryRowWidth, ResetButtonWidth) + 20f;
+        float buttonAreaHeight = MainButtonHeight + ButtonAreaSpacing + ResetButtonHeight + 20f;
 
-        var layout = buttonRoot.GetComponent<VerticalLayoutGroup>();
-        if (layout == null) layout = buttonRoot.AddComponent<VerticalLayoutGroup>();
-        layout.spacing = MainButtonSpacing;
-        layout.childAlignment = TextAnchor.UpperCenter;
-        layout.childControlWidth = false;
-        layout.childControlHeight = false;
-        layout.childForceExpandWidth = false;
-        layout.childForceExpandHeight = false;
+        GameObject buttonArea = FindOrCreateChild(content.transform, "MainMenuButtonArea");
+        RectTransform buttonAreaRt = RectOf(buttonArea);
+        buttonAreaRt.anchorMin = new Vector2(0.5f, ButtonAreaVerticalAnchor);
+        buttonAreaRt.anchorMax = new Vector2(0.5f, ButtonAreaVerticalAnchor);
+        buttonAreaRt.pivot = Center;
+        buttonAreaRt.anchoredPosition = Vector2.zero;
+        buttonAreaRt.sizeDelta = new Vector2(buttonAreaWidth, buttonAreaHeight);
 
-        Button playButton = SetupMainButton(buttonRoot.transform, "PlayButton", playSprite, 0);
-        Button settingsButton = SetupMainButton(buttonRoot.transform, "SettingsButton", settingsSprite, 1);
-        Button resetProgressButton = SetupMainButton(buttonRoot.transform, "ResetProgressButton", resetSprite, 2);
+        var buttonAreaLayout = buttonArea.GetComponent<VerticalLayoutGroup>();
+        if (buttonAreaLayout == null) buttonAreaLayout = buttonArea.AddComponent<VerticalLayoutGroup>();
+        buttonAreaLayout.spacing = ButtonAreaSpacing;
+        buttonAreaLayout.childAlignment = TextAnchor.MiddleCenter;
+        buttonAreaLayout.childControlWidth = false;
+        buttonAreaLayout.childControlHeight = false;
+        buttonAreaLayout.childForceExpandWidth = false;
+        buttonAreaLayout.childForceExpandHeight = false;
+
+        GameObject primaryRow = FindOrCreateChild(buttonArea.transform, "PrimaryButtonRow");
+        primaryRow.transform.SetSiblingIndex(0);
+        RectOf(primaryRow).sizeDelta = new Vector2(primaryRowWidth, MainButtonHeight);
+
+        var primaryRowLayout = primaryRow.GetComponent<HorizontalLayoutGroup>();
+        if (primaryRowLayout == null) primaryRowLayout = primaryRow.AddComponent<HorizontalLayoutGroup>();
+        primaryRowLayout.spacing = PrimaryRowSpacing;
+        primaryRowLayout.childAlignment = TextAnchor.MiddleCenter;
+        primaryRowLayout.childControlWidth = false;
+        primaryRowLayout.childControlHeight = false;
+        primaryRowLayout.childForceExpandWidth = false;
+        primaryRowLayout.childForceExpandHeight = false;
+
+        // FindOrCreateAnywhere locates each button by name WHEREVER it
+        // currently sits in the scene (GameObject.Find searches the whole
+        // scene, not just direct children) before reparenting it into the
+        // new structure - this is what makes the rebuild idempotent and
+        // reuse-safe regardless of prior hierarchy shape (a stale
+        // Phase 9B "MainButtonRoot" layout, or an already-correct one from a
+        // prior run of THIS command). Button.onClick listeners are runtime-
+        // only (MainMenuController2D.Awake adds them fresh each play session
+        // from its serialized field references, re-wired below) - nothing
+        // about reparenting a GameObject touches that.
+        Button playButton = FindOrCreateAnywhere("PlayButton", primaryRow.transform);
+        ConfigureMainButton(playButton.gameObject, playSprite, new Vector2(MainButtonWidth, MainButtonHeight));
+        playButton.transform.SetSiblingIndex(0);
+
+        Button settingsButton = FindOrCreateAnywhere("SettingsButton", primaryRow.transform);
+        ConfigureMainButton(settingsButton.gameObject, settingsSprite, new Vector2(MainButtonWidth, MainButtonHeight));
+        settingsButton.transform.SetSiblingIndex(1);
+
+        Button resetProgressButton = FindOrCreateAnywhere("ResetProgressButton", buttonArea.transform);
+        ConfigureMainButton(resetProgressButton.gameObject, resetSprite, new Vector2(ResetButtonWidth, ResetButtonHeight));
+        resetProgressButton.transform.SetSiblingIndex(1);
+
+        // Cleanup: the old Phase 9B "MainButtonRoot" wrapper was this
+        // builder's own creation (never manually authored) - safe to remove
+        // once empty (its former children were just reparented above). No-op
+        // on every subsequent idempotent run once it's gone.
+        Transform staleButtonRoot = content.transform.Find("MainButtonRoot");
+        if (staleButtonRoot != null && staleButtonRoot.childCount == 0)
+        {
+            Object.DestroyImmediate(staleButtonRoot.gameObject);
+        }
 
         // ---------------- Fullscreen button (Phase 9B) ----------------
         Button fullscreenButton = SetupSimpleButton(safeAreaRoot.transform, "FullscreenButton", buttonBase, buttonInlay,
             shPinscherFont, "Tam Ekran", new Vector2(1f, 1f), new Vector2(-32f, -32f), new Vector2(180f, 76f));
-        fullscreenButton.onClick.RemoveAllListeners();
-        fullscreenButton.onClick.AddListener(fullscreenController.ToggleFullscreen);
+        // Editor-time onClick.AddListener() is never persisted into the saved
+        // scene (same root cause the Back button had) - a self-wiring runtime
+        // component is added instead, which IS persisted.
+        WebFullscreenButtonForwarder2D fullscreenForwarder = fullscreenButton.GetComponent<WebFullscreenButtonForwarder2D>();
+        if (fullscreenForwarder == null) fullscreenForwarder = fullscreenButton.gameObject.AddComponent<WebFullscreenButtonForwarder2D>();
+        SerializedObject fullscreenForwarderSO = new SerializedObject(fullscreenForwarder);
+        fullscreenForwarderSO.FindProperty("fullscreenController").objectReferenceValue = fullscreenController;
+        fullscreenForwarderSO.ApplyModifiedPropertiesWithoutUndo();
 
         // ---------------- SettingsPanel ----------------
         GameObject settingsPanel = FindOrCreateChild(safeAreaRoot.transform, "SettingsPanel");
@@ -311,8 +383,10 @@ public static class MainMenuSceneBuilder2D
                 $"  SettingsButton: '{settingsSprite.name}' ({SettingsSpritePath}) - label embedded.\n" +
                 $"  ResetProgressButton: '{resetSprite.name}' ({ResetSpritePath}) - label embedded.\n" +
                 $"  Font: '{shPinscherFont.name}' ({FontPath}) used for all created text.\n" +
-                "  Hierarchy: Canvas > SafeAreaRoot > MainMenuBackground, MainMenuContent > MainButtonRoot > " +
-                "PlayButton/SettingsButton/ResetProgressButton; SettingsPanel > SettingsBlocker, SettingsCard > " +
+                "  Hierarchy: Canvas > SafeAreaRoot > MainMenuBackground, ReadabilityOverlay, MainMenuContent > " +
+                "MainMenuButtonArea (VerticalLayoutGroup, anchor 0.5/" + ButtonAreaVerticalAnchor + ") > " +
+                "PrimaryButtonRow (HorizontalLayoutGroup) > PlayButton/SettingsButton, ResetProgressButton; " +
+                "FullscreenButton; SettingsPanel > SettingsBlocker, SettingsCard > " +
                 "SettingsCardInset, SettingsTitleBadge, MusicToggleButton, SfxToggleButton, SettingsCloseButton; " +
                 "ResetConfirmationPanel > ModalBlocker, ConfirmationCard > ConfirmationCardInset, " +
                 "ConfirmationTitleBadge, ConfirmationText, ConfirmResetButton, CancelResetButton.");
@@ -382,15 +456,32 @@ public static class MainMenuSceneBuilder2D
         WebBuildConfig2D.EnsureSceneOrder(logDetails);
     }
 
-    private static Button SetupMainButton(Transform parent, string name, Sprite sprite, int siblingIndex)
+    /// <summary>Finds a GameObject by name ANYWHERE in the currently open scene (not just direct children of a given parent, unlike FindOrCreateChild) and reparents it under newParent - the key to safely restructuring a hierarchy across builder versions without ever duplicating an existing button. Creates a fresh GameObject only if truly none exists yet (brand-new scene case).</summary>
+    private static Button FindOrCreateAnywhere(string name, Transform newParent)
     {
-        GameObject go = FindOrCreateChild(parent, name);
-        go.transform.SetSiblingIndex(siblingIndex);
-        var rt = RectOf(go);
-        rt.sizeDelta = new Vector2(MainButtonWidth, MainButtonHeight);
+        GameObject go = GameObject.Find(name);
+        if (go == null)
+        {
+            go = new GameObject(name, typeof(RectTransform));
+        }
+
+        if (go.transform.parent != newParent)
+        {
+            go.transform.SetParent(newParent, false);
+        }
+
+        Button button = go.GetComponent<Button>();
+        if (button == null) button = go.AddComponent<Button>();
+        return button;
+    }
+
+    /// <summary>Applies size/sprite/ColorTint button styling in place - never touches the GameObject's parent/sibling position (callers control that separately), so this is safe to re-run on an already-correctly-parented button.</summary>
+    private static void ConfigureMainButton(GameObject go, Sprite sprite, Vector2 size)
+    {
+        RectOf(go).sizeDelta = size;
 
         Image image = SetupImage(go, sprite, true, Color.white);
-        image.preserveAspect = false; // sprite's own 3:1 aspect already matches the button's own 450x150 ratio exactly.
+        image.preserveAspect = false; // sizes above are chosen to match (or minimize distortion from) the sprite's own native aspect - see the size constants' doc comments.
 
         Button button = go.GetComponent<Button>();
         if (button == null) button = go.AddComponent<Button>();
@@ -403,8 +494,6 @@ public static class MainMenuSceneBuilder2D
         colors.selectedColor = Color.white;
         colors.disabledColor = new Color(1f, 1f, 1f, 0.5f);
         button.colors = colors;
-
-        return button;
     }
 
     private static Button SetupSimpleButton(Transform parent, string name, Sprite baseSprite, Sprite inlaySprite, Font font,

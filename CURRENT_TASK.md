@@ -2,54 +2,326 @@
 
 ## Active Phase
 
-Phase 8A.3.1 - Repair Uniqueness Solver Test Fixtures (CHECKPOINT - paused mid-fix)
+Audio system (Phase 1 + extension) and the Web/Landscape + Level Select work
+are complete and verified with no known unresolved error. **Phase 10 -
+Browser-Local Campaign Progress System - code changes are complete** (see
+"Notes (Phase 10..." below for what changed); **not yet verified in an
+actual Unity Editor Play Mode session or a real WebGL browser build** - no
+live Unity access was available while making these changes. Re-confirm in
+your own Editor session before treating Phase 10 as fully closed (see the
+"What still needs verification" list at the end of the Phase 10 notes).
 
-## Checkpoint (Phase 8A.3.1 - paused, not yet resumed)
+## Current Verified State (supersedes the old Phase 8A.3.1 checkpoint)
 
-**Architecture as of this checkpoint**: the campaign generator is graph-first
-and Editor-only (`CampaignGraphBuilder2D` builds a solved topology,
-`CampaignPipeConverter2D` converts it to real pipe data, the real unchanged
-`FlowSolver2D` validates every candidate, `CampaignUniquenessSolver2D` is a
-from-scratch CSP rewrite - canonical orientation domains, AC-3 propagation,
-MRV ordering, connectivity pruning, an exact packed-bitset memoization key,
-known-solution-first alternative search). `CampaignLevelGenerator2D`
-orchestrates generation with a transactional pilot-batch commit
-(`CampaignGenerateCommand2D`). `GeneratorVersion = "8A.3"`.
+This file previously paused on a Phase 8A.3.1 checkpoint (two dense Tee/
+Corner hub uniqueness-solver fixture failures, both confirmed test-fixture
+bugs, not solver bugs - see the "Phase 8A" notes below for the generator's
+architecture, which is still accurate background). That checkpoint is now
+**stale/historical** - the campaign has since moved forward and now contains
+**Levels 1-100** (the full difficulty plan from
+`CampaignDifficultyProfiles2D` is populated, not just the Levels 7-20 pilot
+described in the Phase 8A notes). Do not re-open or re-triage the 8A.3.1
+fixture failures unless a NEW regression reproduces them.
 
-**Last confirmed live Unity results** (from the user, most recent first):
-- Uniqueness Solver Fixture Suite: **9/11 PASSED, 2 FAILED** (memoization
-  correctness cases 1-5 all passed; production Levels 4-6 report exactly one
-  solution). The 2 failures are fixture-construction bugs, not demonstrated
-  solver bugs - see below.
-- Level 7 smoke test: PASSED (5x5, seed 1506997783, 10 pipes, 1 solution).
-- Level 10 density diagnostics: min=13/max=15 active pipes reached, 500
-  attempts - the 8A.2 density fix is confirmed working.
+Confirmed current state:
 
-**Exact remaining failure** (why the checkpoint stopped here):
-- `[FAIL 02/11] Dense Tee hub, cross-checked against brute force` - the
-  brute-force reference's own `BoardManager2D` was never resized to match
-  the fixture's declared 6x6 bounds (stuck at the 5x5 default), so pipe
-  `(3,0)` - genuinely inside the intended 6x6 board - was rejected as
-  outside the board's *actual* (unresized) grid. `IsInsideGrid=False`.
-- `[FAIL 06/11] Dense 4-neighbor Corner hub, cross-checked against brute
-  force` - the fixture's own topology is genuinely unsolvable (brute force
-  independently found 0 solutions); this is a bad fixture, not a solver bug.
+- `MainMenuScene2D`, `LevelSelectScene2D` and `GameScene2D` **Web/landscape
+  layouts are complete** (responsive Canvas, camera/viewport board-fitting,
+  keyboard+mouse input, fullscreen toggle, WebGL build template/settings -
+  see "Phase 9B" notes below).
+- Campaign catalog contains **Levels 1-100** (`CampaignLevelCatalog2D`,
+  `LevelManager2D.ProductionLevelCount` derives from it - never hardcoded).
+- `BoardManager2D.VisualPackingScale = 0.8f`. GridCells, Pipes and
+  SourceTarget all use this shared packing scale; `BoardManager2D.GridToWorld`
+  spacing uses the same `VisualPackingScale`, so cells remain visually
+  touching (packing scale and grid spacing were deliberately kept in sync -
+  never change one without the other).
+- `BoardRoot`'s local-position correction (needed once the Web/Landscape
+  board-fit math was introduced in Phase 9B) is complete.
+- `IndependentWorldFXRoot` is a **scene-level sibling of `BoardFitContainer`**
+  (not a child of it, and not a child of `BoardRoot`) - see Phase 9L below.
+  `CloudAndRain` and `SuccessFXZone` live under `IndependentWorldFXRoot` and
+  **must not be moved back under `BoardRoot`** (they would then inherit
+  `BoardFitContainer`'s runtime scale/position changes, which is exactly the
+  bug 9L fixed). `DuckFXRoot`/`FlowerFXRoot` remain children of
+  `SuccessFXZone`, unchanged.
+- **Audio system is complete and working**: background music (cross-scene
+  persistent via `DontDestroyOnLoad`, WebGL-autoplay-safe), UI click, pipe
+  rotation click, looping water-flow sound, duck success sound, sparkle
+  success sound. `GameAudioManager2D` persists between scenes. Existing
+  audio PlayerPrefs (`GameAudioSettings2D`'s Music/SFX enabled keys, plus
+  `GameAudioManager2D`'s own volume keys) are preserved/untouched by anything
+  since. See "Audio System" and "Audio System Extension" notes below.
+- The TMP shared-material crash in `TMPTextSetup2D`
+  (`UnassignedReferenceException: m_sharedMaterial ... has not been
+  assigned`) is fixed. `LevelButton2D.prefab` has `UIButtonSound2D` attached.
+- **No known unresolved error currently remains.**
 
-**Uniqueness solver correctness is NOT in question here** - do not modify
-`CampaignUniquenessSolver2D.cs`'s search algorithm, canonical domains, AC-3,
-MRV, connectivity pruning, or memoization key/equality to chase this. Both
-failures are test-fixture-construction bugs, confirmed by the user's own
-live run.
+---
 
-**Exact next command once the fix resumes**:
+## Notes (Phase 10 - Browser-Local Campaign Progress System)
 
-```text
-YagmurRotasi2D > Phase 8 > Run Uniqueness Solver Fixture Suite
-```
+**Goal**: a WebGL-compatible browser-local campaign progress system storing
+only (1) the highest unlocked level and (2) the best star count per level.
 
-required result: `Uniqueness Solver Fixture Suite: 11/11 PASSED`, before
-proceeding to the Level 10 uniqueness benchmark or any further pilot
-generation.
+**What this phase actually did** (of the 4 items the prior session's "what
+is genuinely NOT yet done/verified" list called out):
+
+1. **WebGL IndexedDB flush - implemented.** New
+   `Assets/Plugins/WebGL/GameProgressSync2D.jslib` exposes
+   `SyncGameProgressToIndexedDB` (`FS.syncfs(false, ...)`, only if `FS`/
+   `FS.syncfs` exist - never throws if the WebGL runtime doesn't expose
+   them) and, via a `__postset` block (Emscripten's one-time-at-link-init
+   hook, never re-run per call), also installs `visibilitychange`
+   (tab-hidden) and `beforeunload` listeners that call the same sync
+   function - covers both "flush right after a real write" and "flush
+   right before the page might close." `GameProgress2D.Save()` (already the
+   single method every mutator in the file already routed through) now
+   calls this via a `[DllImport("__Internal")]` extern, gated
+   `#if UNITY_WEBGL && !UNITY_EDITOR` - **zero behavior change on any other
+   platform or in the Editor**, and no new PlayerPrefs keys. This is the
+   `.jslib` bridge call the prior session's notes said would "genuinely be
+   required" - confirmed required, since Unity's WebGL `PlayerPrefs`
+   backend needs this explicit flush and nothing already provided it
+   (`Assets/WebGLTemplates/YagmurRotasiWeb/index.html` was read in full and
+   contains no syncfs/IndexedDB code of any kind).
+2. **Fresh-player default path - was NOT actually wired, now fixed.**
+   Contrary to what the prior session's notes assumed, tracing the real
+   code path found `LevelSelectController2D.PopulateLevelCards()` was
+   hardcoding `isUnlocked: true, isCompleted: false, earnedStars: 0` for
+   **every** card (a leftover Phase 9A Part F placeholder, per its own
+   old doc comment: "no save system yet... never PlayerPrefs") - so every
+   level appeared unlocked with zero stars regardless of
+   `GameProgress2D`'s actual stored state, for every player, not just a
+   fresh one. Fixed: each card now reads
+   `GameProgress2D.GetBestStars(levelNumber)` and compares `levelNumber`
+   against `GameProgress2D.HighestUnlockedLevel` to derive
+   `isUnlocked`/`earnedStars`; `isCompleted` is `earnedStars > 0` (valid
+   because `ScoreManager2D.CalculateSuccess`'s `CalculateStars` always
+   awards >= 1 star on any success - confirmed by reading it directly, not
+   assumed). `HandleLevelCardClicked` also gained a defense-in-depth
+   locked-level guard (mirrors the codebase's existing
+   `button.interactable` defense-in-depth pattern used by
+   `UIButtonSound2D`) so a locked card can never load gameplay even if a
+   click somehow still reached the handler. `bestScore` stays `0` -
+   `GameProgress2D` was never asked to persist best score, only best
+   stars, and this phase does not add a second stored value beyond the
+   stated goal.
+3. **In-game level reload not deleting progress - re-verified, no change
+   needed.** Read `LevelManager2D.ReloadCurrentLevel()` directly: it only
+   calls `LoadLevel(currentLevelIndex)` - no call to
+   `GameProgress2D.ResetLevelProgress()` anywhere in its path, confirmed
+   by reading the method body, not just grepping for the call.
+4. **Reset Progress not deleting audio preferences - re-verified, no
+   change needed.** Read `MainMenuController2D.HandleConfirmResetPressed()`
+   directly: it calls only `GameProgress2D.ResetLevelProgress()`, nothing
+   else, and `GameProgress2D.ResetLevelProgress()` itself still only ever
+   touches its own three key groups (unchanged by this phase).
+
+**Files changed this phase**: `Assets/Scripts/Gameplay2D/GameProgress2D.cs`
+(WebGL sync hook only - `TotalLevels`/`CurrentLevel`/
+`HighestUnlockedLevel`/`SetCurrentLevel`/`MarkLevelCompleted`/
+`GetBestStars`/`ResetLevelProgress`'s logic and every existing PlayerPrefs
+key are byte-for-byte unchanged), new
+`Assets/Plugins/WebGL/GameProgressSync2D.jslib`,
+`Assets/Scripts/UI2D/LevelSelectController2D.cs` (locked/star wiring +
+click guard). `LevelButton2D.cs`, `MainMenuController2D.cs`,
+`LevelManager2D.cs`, `GameAudioSettings2D.cs`, `CampaignLevelCatalog2D`/
+level data/solver/scoring were all read for verification but **not
+modified**.
+
+**What still needs verification** (no live Unity access while making these
+changes):
+- A real Unity Editor Play Mode pass through `LevelSelectScene2D`: confirm
+  a brand-new/cleared PlayerPrefs profile shows Level 1 unlocked and
+  Levels 2+ locked, that completing Level 1 unlocks Level 2 with the right
+  star count displayed, and that the new locked-click guard doesn't block
+  a legitimately-unlocked card.
+- An actual WebGL browser build: confirm progress survives a hard
+  refresh/tab close (the scenario the `.jslib` fix targets) - this cannot
+  be verified outside a real browser + built player.
+- Confirm the project's WebGL Player Settings have no conflicting
+  `.jslib`/`Plugins` setup that would collide with the new
+  `Assets/Plugins/WebGL/GameProgressSync2D.jslib` (none was found during
+  this phase - `Assets/Plugins/` did not exist before this change).
+
+---
+
+## Notes (Phase 9 - Web/Landscape Conversion, Level Select, Audio System)
+
+These sub-phases happened after Phase 8A and before Phase 8B/8C were ever
+started - Levels 21-100 were generated at some point in this range (exact
+generation-session details are not re-captured here; the catalog's current
+state, Levels 1-100 present and validated, is the fact that matters going
+forward). Phase 8B/8C further down this file describing "Levels 21-100 not
+yet populated" is **stale** - superseded by the "Current Verified State"
+summary at the top of this file.
+
+### Phase 9A - Campaign Level Select Screen
+
+- New `Assets/Scenes/LevelSelectScene2D.unity` with dynamically-generated
+  level cards (one `LevelButton2D.prefab` instance per
+  `CampaignLevelCatalog2D` entry, built/instantiated at runtime by
+  `LevelSelectController2D` - not hand-authored per level).
+- New `Assets/Scripts/Gameplay2D/CampaignSession2D.cs` navigation-state
+  class carrying which level was chosen in Level Select through to
+  `GameScene2D`.
+- `MainMenuController2D.HandlePlayPressed` now opens `LevelSelectScene2D`
+  instead of loading gameplay directly; `UIManager2D`'s "Bölüm Seçimine
+  Dön"/success panel "back" button loads `LevelSelectScene2D` (not
+  `MainMenuScene2D`) - normal gameplay Back no longer returns all the way to
+  the main menu.
+
+### Phase 9B - Web/Landscape Conversion
+
+- Converted the whole game from portrait-mobile to landscape-desktop-web:
+  responsive Canvas foundation, board-fitting via camera+viewport math
+  (`BoardRoot`'s local position was corrected as part of this - see
+  "Current Verified State" above), keyboard/mouse input alongside touch,
+  a fullscreen toggle (`WebFullscreenController2D`), a WebGL build template,
+  Build Settings updates, a performance audit, and a layout validator
+  (`WebLayoutValidator2D`/`TMPTextSetup2D`'s TMP migration groundwork).
+- This is the phase that introduced `BoardFitContainer` and the runtime
+  scale/position math that Phase 9K/9L later had to specifically shield
+  `DuckFXRoot`/`FlowerFXRoot`/`CloudAndRain`/`SuccessFXZone` from
+  inheriting unintentionally.
+
+### Main Menu Button Layout Fix
+
+- Fixed the Main Menu's button positioning (the title was being covered by
+  the buttons) into the required layout: Play/Settings side-by-side, Reset
+  centered below. No changes to `MainMenuController2D`'s logic, purely
+  layout/RectTransform.
+
+### Level Select Readability Fix
+
+- Fixed blurry/too-small text and near-invisible stars on Level Select
+  cards by migrating card text to TextMeshPro with a generated SDF font
+  asset (`Assets/Fonts/SHPinscher SDF.asset`, generated once from the
+  existing `Assets/SHPinscher-Regular11/SHPinscher-Regular.otf` - no new/
+  remote font introduced). See `Assets/Editor/TMPTextSetup2D.cs`
+  (`GetOrCreateFontAsset`/`SetupTMPText`) and
+  `Assets/Editor/LevelButtonPrefabBuilder2D.cs`.
+
+### Phase 9K - DuckFXRoot/FlowerFXRoot Transform Preservation
+
+- Stopped overwriting `DuckFXRoot`/`FlowerFXRoot`'s Edit-Mode-authored
+  transforms at runtime/build-time (a regression introduced by the Web
+  board-fit math touching more of the hierarchy than intended), while still
+  keeping `CloudAndRain`'s enforcement at the time - **that enforcement was
+  removed entirely in Phase 9L below**, once `CloudAndRain` was relocated
+  out from under `BoardRoot` and no longer needed it.
+
+### Phase 9L - Independent World FX Root Hierarchy Fix
+
+- Moved `SuccessFXZone` and `CloudAndRain` to a new independent scene-level
+  root, `IndependentWorldFXRoot` (a sibling of `BoardFitContainer`, not a
+  child of `BoardRoot`), so they structurally can never inherit
+  `BoardFitContainer`'s runtime scale/position changes - see "Current
+  Verified State" above for the resulting rule (never move them back under
+  `BoardRoot`).
+- Removed `CloudAndRain`'s now-unnecessary transform enforcement entirely
+  (superseding the Phase 9K workaround) since the hierarchy fix makes it
+  structurally unneeded.
+
+### Audio System (initial implementation)
+
+- New `Assets/Scripts/Audio2D/GameAudioManager2D.cs` - singleton,
+  `DontDestroyOnLoad`, duplicate-safe (`Instance` + `Destroy(gameObject)` on
+  a second instance), delegates Music/SFX enabled state to the pre-existing
+  `GameAudioSettings2D` (never a second disconnected PlayerPrefs store) so
+  the existing Settings-panel toggle buttons keep real effect. Owns its own
+  `YagmurRotasi2D_MusicVolume`/`YagmurRotasi2D_SFXVolume` PlayerPrefs keys
+  (new state, no prior storage existed for volume). `musicStarted` guard
+  makes `PlayMusic()` idempotent for the whole play session (never restarts
+  on level reset/next level/scene change). WebGL autoplay handling: one
+  `Play()` attempt, then (only if still not playing) a cheap `Update()`
+  poll for the first genuine pointer/touch/key press via the Input System -
+  never a per-frame `Play()` retry, never noisy logging.
+- New `Assets/Scripts/Audio2D/UIButtonSound2D.cs` - `[RequireComponent(Button)]`,
+  additive `onClick.AddListener` (never `RemoveAllListeners`), checks
+  `button.interactable` before playing (defense-in-depth on top of Unity's
+  own guarantee that `onClick` never fires at all when `interactable` is
+  false), idempotent registration guard.
+- Hook points: `LevelManager2D.HandlePipeRotatedByPlayer()` (the existing
+  single centralized callback every spawned pipe's `OnPlayerRotated` already
+  routes through) plays the pipe-click sound - never touches rotation logic
+  itself. `UIButtonSound2D` is attached to scene buttons via a blanket
+  `Object.FindObjectsByType<Button>(FindObjectsInactive.Include, ...)` scan
+  (covers hidden panels too) in the builder below, plus directly on
+  `LevelButton2D.prefab`'s root (`Assets/Editor/
+  LevelButtonPrefabBuilder2D.cs`) since level cards are runtime-instantiated
+  and never exist in a saved scene for a scene-wide scan to find.
+- New `Assets/Editor/GameAudioSystemBuilder2D.cs`
+  (`YagmurRotasi2D > Audio > Build Audio System`) - finds `music`/
+  `sfx_pipe_click`/`sfx_ui_click` (later extended - see below) by EXACT
+  AudioClip name (never fuzzy match, never duplicates/renames), builds/reuses
+  exactly one `GameAudioManager2D` + its `MusicAudioSource`/`SFXAudioSource`
+  children per scene, attaches `UIButtonSound2D` idempotently. Fully
+  idempotent - safe to re-run any number of times.
+
+### TMP Shared-Material Crash Fix (`TMPTextSetup2D`)
+
+- Root cause: `TMPTextSetup2D.SetupTMPText`'s outline setup read
+  `text.fontMaterial` (a lazy getter) before ever assigning
+  `text.fontSharedMaterial` explicitly. On a REBUILD of an already-existing
+  `LevelButton2D.prefab`, `LockedText` is found already parented under an
+  inactive `LockedOverlay` (deactivated at the end of the prior build run) -
+  that `TextMeshProUGUI` had never been enabled, so TMP's internal shared-
+  material bookkeeping was never populated, and the lazy getter threw
+  `UnassignedReferenceException: m_sharedMaterial ... has not been
+  assigned` instead of gracefully creating it. The font asset itself
+  (`Assets/Fonts/SHPinscher SDF.asset`) was confirmed NOT broken - its own
+  `m_Material` reference resolves correctly.
+- Fix: added a null-font guard (returns early, logs one clear error, never
+  throws) and a new `EnsureFontSharedMaterial(text, font, goName)` helper
+  that assigns `text.fontSharedMaterial = font.material` directly (a plain
+  field write, not a lazy getter) whenever it's found null, called before
+  ever touching `fontMaterial`/`outlineWidth`/`outlineColor`. Idempotent and
+  repairs previously-broken components on every call, not just new ones;
+  never instantiates a new Material (only reassigns the existing shared
+  reference), so re-running the builder can never accumulate duplicate
+  material assets.
+- Menu command unchanged: `YagmurRotasi2D > Build Level Button Prefab`.
+
+### Audio System Extension - Water Flow / Duck / Sparkle
+
+- Extended `GameAudioManager2D` with a third `WaterFlowAudioSource` child
+  (loop=true, playOnAwake=false, spatialBlend=0, volume=0.45 - scaled
+  proportionally whenever `SetSFXVolume` changes, so it stays quieter than
+  one-shot SFX by the same authored ratio) and three new clips
+  (`sfx_water_flow`, `sfx_duck`, `sfx_sparkle`, all found by the same exact-
+  name lookup, all at `Assets/Audio/GameAudioManager2D/`).
+- New public API: `StartWaterFlow()`/`StopWaterFlow()` (idempotent - no-op
+  if already playing/SFX disabled/nothing playing respectively) and
+  `PlayDuckSuccess()`/`PlaySparkleSuccess()` (one-shot via the existing
+  `SFXAudioSource.PlayOneShot` path).
+- Real lifecycle hooks (never a button-click-only hook):
+  - `WaterFlowAnimator2D.RunSequence()` - `StartWaterFlow()` right after
+    `GameState2D.IsInputLocked = true` (visible pipe-fill is about to
+    begin; `PlaySuccess` is only ever called after the route already passed
+    every validation check, so the loop never starts on solving/validation
+    or on a failed/leaking attempt - failure never calls `PlaySuccess` at
+    all). `StopWaterFlow()` right after the `flowWaves` loop finishes
+    (pipe-fill visuals done, before the separate flower/duck presentation).
+    Also stopped from `CancelActiveAnimation()` (covers reset/reload/cancel)
+    and a new `OnDisable()` (scene-exit safety - no stale loop can survive
+    into `MainMenuScene2D`/`LevelSelectScene2D`).
+  - `SuccessFXController2D.PlaySuccessFX()` - `PlaySparkleSuccess()`/
+    `PlayDuckSuccess()` called immediately after the flower/duck animators'
+    actual `PlayFromStart()` calls (NOT on `flowerRoot.SetActive`, since
+    flowers are already visible pre-success at frame 0 - hooking there
+    would fire on every level load; `duckRoot` genuinely is inactive at
+    every other time so that one's safe either way, but both are hooked at
+    the same real animation-start point for consistency).
+  - `SetSFXEnabled(false)` now also calls `StopWaterFlow()` immediately
+    (one-shot sounds already gate on `GameAudioSettings2D.SfxEnabled`
+    inside the existing `PlaySfx()` helper, so they need no extra change).
+- `GameAudioSystemBuilder2D` updated to find/wire the three new clips and
+  build/reuse the `WaterFlowAudioSource` child - same menu command,
+  `YagmurRotasi2D > Audio > Build Audio System`.
+
+---
 
 ## Notes (Phase 8A - Scalable Campaign Foundation and Pilot Generator)
 

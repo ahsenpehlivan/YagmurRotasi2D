@@ -23,6 +23,27 @@ namespace YagmurRotasi2D.Gameplay2D
         /// </summary>
         public const float ReferenceBoardWorldSize = 5f;
 
+        /// <summary>
+        /// Phase 9I: GridCells/Pipes/SourceTarget's own container transforms
+        /// are deliberately kept at a manually-verified visual scale smaller
+        /// than 1 (see LevelManager2D/GameSceneWebLayoutBuilder2D - both
+        /// build (VisualPackingScale, VisualPackingScale, 1) container
+        /// scales from THIS constant, the single source of truth) so their
+        /// CONTENTS render smaller. But every spawned cell/pipe/Source/Target
+        /// is placed via Instantiate(prefab, worldPos, ...), which sets
+        /// WORLD position directly and independently of the parent
+        /// container's own scale - left alone, that meant cell/pipe centers
+        /// stayed spaced at the FULL, un-shrunk CellSize while their
+        /// rendered size shrank by the container's scale, causing visible
+        /// gaps between cells. GridToWorld() below applies this SAME ratio
+        /// to its spacing calculation so spacing and rendered size shrink in
+        /// lockstep - CellSize's own reported VALUE is intentionally left
+        /// untouched (grid bounds/collider/other consumers that need the
+        /// "logical" cell size are unaffected); only the placement math is
+        /// adjusted.
+        /// </summary>
+        public const float VisualPackingScale = 0.8f;
+
         private PipeTile2D[,] pipes;
         private readonly List<GameObject> spawnedGridCells = new List<GameObject>();
 
@@ -100,10 +121,39 @@ namespace YagmurRotasi2D.Gameplay2D
         /// <summary>
         /// Grid coordinates are centered on the board (e.g. (0,0) is the middle cell),
         /// matching the coordinates used directly in LevelData2D.
+        ///
+        /// Phase 9F root-cause fix: this used to be `transform.position +
+        /// Bounds.CellToLocalPosition(...)` - a raw Vector3 addition that
+        /// mixed a WORLD-space point (transform.position, which already
+        /// reflects BoardFitContainer's fitScale via the parent chain) with
+        /// an UNSCALED local offset (cell*cellSize, never multiplied by
+        /// fitScale). Every spawned cell/pipe/Source/Target's own RENDERED
+        /// SIZE correctly scales with fitScale (localScale = cellSize * ...
+        /// combined with the parent's lossyScale = fitScale), but the raw
+        /// addition here left the SPACING between them frozen at the
+        /// unscaled cellSize - the two only matched by coincidence at
+        /// fitScale ~= 1. Enlarging the board (Phase 9D) pushed fitScale
+        /// well above 1, so each cell's world size grew far past the still-
+        /// fixed spacing between cell centers - the exact, sole cause of the
+        /// reported grid/pipe overlap. transform.TransformPoint() applies
+        /// BoardManager2D's own local-to-world matrix (including the
+        /// inherited fitScale) to the offset before adding it, so spacing
+        /// and rendered size now scale in lockstep at any fitScale - single
+        /// source of truth is cellSize, as required.
+        ///
+        /// Phase 9I addendum: the same class of mismatch reappeared one
+        /// level down. GridCells/Pipes/SourceTarget's own container scale
+        /// (VisualPackingScale, see its doc comment) shrinks what's rendered
+        /// INSIDE them, but Instantiate(prefab, worldPos, ...) sets world
+        /// position directly, independent of that container's scale - so
+        /// spacing stayed at the un-shrunk cellSize while rendered size
+        /// shrank, reopening a gap. Multiplying by VisualPackingScale here
+        /// closes it the same way: spacing and rendered size shrink in
+        /// lockstep again, now including the container's own scale too.
         /// </summary>
         public Vector3 GridToWorld(Vector2Int gridPos)
         {
-            return transform.position + Bounds.CellToLocalPosition(gridPos, cellSize);
+            return transform.TransformPoint(Bounds.CellToLocalPosition(gridPos, cellSize * VisualPackingScale));
         }
 
         public bool IsInsideGrid(Vector2Int gridPos)

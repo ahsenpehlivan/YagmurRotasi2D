@@ -1,4 +1,5 @@
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,18 +13,27 @@ namespace YagmurRotasi2D.UI2D
     /// preparation for the later save system) even though every level is
     /// currently always unlocked/never completed/0 stars - no PlayerPrefs, no
     /// save-system code lives here yet.
+    ///
+    /// Readability fix: levelNumberText/gridSizeText/devInfoText are
+    /// TextMeshProUGUI (TMP_Text), not legacy Text - see
+    /// LevelButtonPrefabBuilder2D's doc comment for why (SDF rendering stays
+    /// crisp under CanvasScaler, legacy Text's bitmap glyphs do not).
     /// </summary>
     public class LevelButton2D : MonoBehaviour
     {
         [SerializeField] private Button button;
-        [SerializeField] private Text levelNumberText;
-        [SerializeField] private Text gridSizeText;
+        [SerializeField] private TMP_Text levelNumberText;
+        [SerializeField] private TMP_Text gridSizeText;
         [SerializeField] private GameObject completedBadge;
         [SerializeField] private Image[] starImages;
         [SerializeField] private GameObject lockedOverlay;
-        [SerializeField] private Text devInfoText;
-        [SerializeField] private float earnedStarAlpha = 1f;
-        [SerializeField] private float unearnedStarAlpha = 0.3f;
+        [SerializeField] private TMP_Text devInfoText;
+
+        [Tooltip("Multiplies the star sprite's own art at full opacity - shows its natural (gold) color.")]
+        [SerializeField] private Color earnedStarColor = Color.white;
+
+        [Tooltip("Muted/desaturated multiply tint for an unearned star - stays clearly visible (never a faint low-alpha ghost) while still reading as distinct from an earned star.")]
+        [SerializeField] private Color unearnedStarColor = new Color(0.55f, 0.52f, 0.46f, 0.9f);
 
         public int LevelNumber { get; private set; }
 
@@ -68,7 +78,7 @@ namespace YagmurRotasi2D.UI2D
             }
         }
 
-        /// <summary>All three star placeholders stay active/visible (unearned = reduced alpha, same convention as SuccessPanelView2D) rather than being hidden - keeps the card's layout stable once real star data exists.</summary>
+        /// <summary>All three star placeholders stay active/visible (unearned = muted color, not near-invisible low alpha) rather than being hidden - keeps the card's layout stable once real star data exists.</summary>
         private void SetStars(int earnedStars)
         {
             if (starImages == null)
@@ -80,9 +90,7 @@ namespace YagmurRotasi2D.UI2D
                 if (starImages[i] == null)
                     continue;
 
-                Color c = starImages[i].color;
-                c.a = i < clamped ? earnedStarAlpha : unearnedStarAlpha;
-                starImages[i].color = c;
+                starImages[i].color = i < clamped ? earnedStarColor : unearnedStarColor;
             }
         }
     }
